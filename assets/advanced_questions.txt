@@ -1,0 +1,10 @@
+The LCM of 24 and 36 is?|72|48|96|144
+The HCF of 84 and 126 is?|42|21|14|63
+If a number is divisible by both 4 and 6, it must be divisible by?|12|8|10|24
+The value of 3² + 4² is?|25|12|49|7
+What is 25% of 480?|120|100|140|150
+The perimeter of a rectangle of length 12 cm and breadth 8 cm is?|40 cm|96 cm|20 cm|32 cm
+A number when divided by 7 gives remainder 3. What will be the remainder when the same number is divided by 7 after adding 4 to it?|0|1|2|6
+The smallest prime number greater than 50 is?|53|51|57|59
+The value of 5³ is?|125|25|15|100
+The area of a square of side 15 cm is?|225 cm²|60 cm²|30 cm²|150 cm²
