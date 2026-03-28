@@ -1,22 +1,24 @@
 import sqlite3
 from pathlib import Path
 from datetime import datetime
+import uuid
 
 # =========================================================
 # CONFIG
 # =========================================================
 DB_PATH = Path(__file__).resolve().parent / "students.db"
 
-
 # =========================================================
 # CONNECTION (SAFE)
 # =========================================================
 def get_connection():
     """
-    Create a SQLite connection with safety settings.
+    Create a SQLite connection with Row factory and timeout for concurrency.
     """
     conn = sqlite3.connect(DB_PATH, timeout=10)
     conn.row_factory = sqlite3.Row
+    # Enable foreign keys for attempt saving safety
+    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 def conn():
@@ -30,8 +32,8 @@ def init_db() -> bool:
     Initialize all required tables.
     """
     try:
-        with get_connection() as conn:
-            cur = conn.cursor()
+        with get_connection() as c:
+            cur = c.cursor()
 
             # ------------------ STUDENTS ------------------
             cur.execute("""
@@ -53,7 +55,7 @@ def init_db() -> bool:
                     student_id TEXT,
                     created_at TEXT NOT NULL,
                     is_active INTEGER NOT NULL DEFAULT 1,
-                    FOREIGN KEY(student_id) REFERENCES students(id)
+                    FOREIGN KEY(student_id) REFERENCES students(id) ON DELETE SET NULL
                 )
             """)
 
@@ -102,56 +104,63 @@ def init_db() -> bool:
                 )
             """)
 
-            conn.commit()
-
-        print("✅ SQLite database initialized successfully.")
+            c.commit()
+        
+        # After creating tables, ensure a Demo Student exists for hardcoded logins
+        ensure_demo_student()
+        
+        print("✅ SQLite database and Demo Student initialized successfully.")
         return True
 
     except Exception as e:
         print(f"❌ Error initializing database: {e}")
         return False
 
-
 # =========================================================
-# SAFE QUERY EXECUTOR (IMPORTANT)
+# HARDCODED HELPER
 # =========================================================
-def execute_query(query, params=(), fetch=False):
+def ensure_demo_student():
     """
-    Execute a query safely.
-    Prevents database locking issues.
+    Checks for 'Demo Student' in the database. 
+    If missing, creates it so hardcoded logins can save attempts.
     """
     try:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute(query, params)
-            conn.commit()
-
-            if fetch:
-                return cur.fetchall()
-
-    except sqlite3.OperationalError as e:
-        print(f"❌ Database error: {e}")
-
+        with get_connection() as c:
+            cur = c.cursor()
+            cur.execute("SELECT id FROM students WHERE name = ?", ("Demo Student",))
+            row = cur.fetchone()
+            
+            if not row:
+                demo_id = str(uuid.uuid4())
+                cur.execute("""
+                    INSERT INTO students (id, name, grade, batch, enrollment_id)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (demo_id, "Demo Student", 10, "HARDCODED", 999))
+                c.commit()
+                return demo_id
+            return row['id']
+    except Exception as e:
+        print(f"❌ Failed to ensure demo student: {e}")
+        return None
 
 # =========================================================
-# UTILITY FUNCTIONS
+# UTILITIES
 # =========================================================
 def get_current_timestamp() -> str:
-    """
-    Returns current UTC timestamp.
-    """
+    """Returns current ISO format timestamp."""
     return datetime.utcnow().isoformat()
 
-# Redundate code for testing database connection and schema
+def execute_query(query, params=(), fetch=False):
+    """Safe query execution wrapper."""
+    try:
+        with get_connection() as c:
+            cur = c.cursor()
+            cur.execute(query, params)
+            c.commit()
+            return cur.fetchall() if fetch else None
+    except sqlite3.Error as e:
+        print(f"❌ Query error: {e}")
+        return None
+
 if __name__ == "__main__":
     init_db()
-    
-    c = conn()
-    cur = c.cursor()
-    
-    cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
-    print([dict(row) for row in cur.fetchall()])
-    rows = cur.fetchall()
-    for row in rows:
-        print(len(row), row)
-        id, name = row

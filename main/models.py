@@ -145,57 +145,40 @@ def delete_student_account(student_id):
 # ----------------------------
 
 def login_user(login_id, password=None):
-    # 1. 🔐 HARDCODED MASTER CREDENTIALS CHECK
-    # This checks the hardcoded values before even opening a database connection.
-    
+    login_id = login_id.strip()
+
+    # 1. Hardcoded Admin
     if login_id == "admin" and password == "admin@123":
-        return {
-            "user_id": 0,           # Static ID for master admin
-            "role": "admin",
-            "student_id": None,
-            "login_id": "admin"
-        }
+        return {"role": "admin", "login_id": "admin", "student_id": None}
 
+    # 2. Hardcoded Student
     if login_id == "student" and password == "student@123":
+        from db import ensure_demo_student  # Import helper from db.py
+        demo_id = ensure_demo_student()
         return {
-            "user_id": 1,           # Static ID for master student
-            "role": "student",
-            "student_id": 1,        # Ensure this matches your logic expectations
-            "login_id": "student"
+            "role": "student", 
+            "login_id": "student", 
+            "student_id": demo_id, 
+            "name": "Demo Student"
         }
 
-    # 2. DATABASE FALLBACK
-    # If the hardcoded check fails, proceed to check the SQLite database
+    # 3. DB Fallback
     try:
-        c = conn()
-        cur = c.cursor()
-
-        cur.execute("""
-            SELECT id, role, student_id, is_active
-            FROM users WHERE login_id=?
-        """, (login_id.strip(),))
-
-        row = cur.fetchone()
-        c.close()
-
-        if not row:
-            return None
-
-        # Convert row to dict if it's a sqlite3.Row object
-        data = dict(row)
-
-        if not data["is_active"]:
-            return None
-
-        return {
-            "user_id": data["id"],
-            "role": data["role"],
-            "student_id": data["student_id"],
-            "login_id": login_id
-        }
-    except Exception as e:
-        print(f"Login database error: {e}")
-        return None
+        with get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT id, role, student_id, is_active FROM users WHERE login_id=?", (login_id,))
+            row = cur.fetchone()
+            # If using sqlite3.Row, row['role'] works.
+            if row and row['is_active']:
+                return {
+                    "user_id": row['id'], 
+                    "role": row['role'], 
+                    "student_id": row['student_id'], 
+                    "login_id": login_id
+                }
+    except Exception:
+        pass
+    return None
 
 # ----------------------------
 # ATTEMPTS
@@ -226,27 +209,29 @@ def save_attempt(student_id, section, operation, level, score, total_q, avg_spee
 
 
 def save_t20_attempt(student_id, student_name, operation, difficulty, score, total_q, avg_speed):
-    c = conn()
-    cur = c.cursor()
-
-    cur.execute("""
-        INSERT INTO t20_attempts
-        (id, student_id, student_name, operation, difficulty, score, total_q, avg_speed, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        str(uuid.uuid4()),
-        student_id,
-        student_name,
-        operation,
-        difficulty,
-        int(score or 0),
-        int(total_q or 0),
-        float(avg_speed or 0),
-        _now()
-    ))
-
-    c.commit()
-    c.close()
+    if not student_id:
+        print("⚠️ Cannot save T20 attempt: Missing student_id")
+        return False
+        
+    try:
+        with get_connection() as conn:
+            cur = conn.cursor()
+            attempt_id = str(uuid.uuid4())
+            created_at = datetime.utcnow().isoformat()
+            
+            cur.execute("""
+                INSERT INTO t20_attempts (
+                    id, student_id, student_name, operation, 
+                    difficulty, score, total_q, avg_speed, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (attempt_id, student_id, student_name, operation, 
+                  difficulty, score, total_q, avg_speed, created_at))
+            conn.commit()
+            return True
+    
+    except Exception as e:
+        print(f"❌ Error saving T20 attempt: {e}")
+        return False
 
 
 # ----------------------------

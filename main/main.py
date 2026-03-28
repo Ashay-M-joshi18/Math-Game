@@ -944,8 +944,23 @@ class AsteroidMathGame:
         if user["role"] == "student":
             self.current_user = user
             student_id = user.get("student_id")
+            
+            # Fetch the row from the students table
             student_row = get_student(student_id) if student_id else None
-            self.student_name = student_row[1] if student_row and len(student_row) > 1 else "Student"
+            
+            # --- FIX START ---
+            if student_row:
+                # Access by key name 'name' instead of index [1]
+                # student_row is likely a sqlite3.Row or a dict now
+                try:
+                    self.student_name = student_row['name']
+                except (KeyError, TypeError):
+                    # Fallback if it's a standard tuple
+                    self.student_name = student_row[1] if len(student_row) > 1 else "Student"
+            else:
+                self.student_name = "Student"
+            # --- FIX END ---
+
             self.student_login_id = user.get("login_id", "N/A")
             self.show_operation_screen()
         else:
