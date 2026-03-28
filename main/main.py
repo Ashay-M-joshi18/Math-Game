@@ -5952,3 +5952,4 @@ if __name__ == "__main__":
     root = tk.Tk()
     game = AsteroidMathGame(root)
     root.mainloop()
+   

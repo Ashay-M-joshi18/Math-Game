@@ -1,0 +1,15 @@
+How many ways can 3 students sit in a row of 3 chairs?|6|3|9|12 
+A pizza shop offers 5 toppings. How many ways can you choose exactly 2?|10|25|12|20 
+How many 3-digit numbers can be formed using {1, 2, 3} without repetition?|6|9|27|3 
+In how many ways can a captain and vice-captain be chosen from a team of 10?|90|100|45|19 
+How many different arrangements can be made using all letters in 'CAT'?|6|3|9|12 
+A bag has 4 different colored balls. How many ways to pick 2 balls at once?|6|8|16|4 
+In how many ways can 5 people stand in a line for a photo?|120|25|60|100
+A 2-digit door code uses digits 0-9. How many codes are possible if digits can repeat?|100|90|81|20 
+How many ways can a committee of 3 be chosen from a group of 5 friends?|10|15|20|5 
+If a coin is tossed 3 times, how many total possible outcomes are there?|8|6|3|9 
+How many diagonals can be drawn in a pentagon (5-sided figure)?|5|10|15|20 
+A student has 4 shirts and 3 pants. How many different outfits can they wear?|12|7|14|24 
+How many ways can 4 different books be arranged on a shelf?|24|12|16|8 
+In a race with 8 runners, how many ways can Gold, Silver, and Bronze be awarded?|336|512|56|120 
+How many 2-letter words can be formed from 'MATH' without repeating letters?|12|16|8|4 
