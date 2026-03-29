@@ -1,503 +1,580 @@
+import secrets
+import string
 import uuid
 from datetime import datetime, timezone
-from db import conn , get_connection
+
+from db import (
+    DEFAULT_ADMIN_LOGIN,
+    DEFAULT_ADMIN_PASSWORD,
+    DEFAULT_STUDENT_LOGIN,
+    DEFAULT_STUDENT_NAME,
+    DEFAULT_STUDENT_PASSWORD,
+    conn,
+    ensure_default_admin_user,
+    ensure_default_student_user,
+    get_connection,
+    hash_password,
+    verify_password,
+)
 
 
 def _now():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
 
 
-# ----------------------------
-# ADMIN
-# ----------------------------
+def _generate_temp_password(length=10):
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def _row_to_dict(row):
+    return dict(row) if row else None
+
+
+def _build_user_payload(row, *, login_id_override=None, name_override=None):
+    if not row:
+        return None
+
+    payload = {
+        "user_id": row["id"],
+        "role": row["role"],
+        "student_id": row["student_id"],
+        "login_id": login_id_override or row["login_id"],
+    }
+
+    if name_override is not None:
+        payload["name"] = name_override
+
+    return payload
+
 
 def ensure_default_admin():
-    c = get_connection()
-    cur = c.cursor()
-
-    # 🔍 Check if admin already exists
-    cur.execute("SELECT 1 FROM users WHERE role=? LIMIT 1", ("admin",))
-    exists = cur.fetchone()
-
-    if not exists:
-        cur.execute("""
-            INSERT INTO users 
-            (id, login_id, role, student_id, created_at, is_active)
-            VALUES (?, ?, 'admin', NULL, ?, 1)
-        """, (
-            str(uuid.uuid4()),
-            "admin",
-            _now()
-        ))
-        c.commit()  # ✅ IMPORTANT
-
-    cur.close()
-    c.close()
+    admin_id = ensure_default_admin_user()
+    ensure_default_student_user()
+    return admin_id
 
 
-# ----------------------------
-# STUDENTS
-# ----------------------------
+def ensure_default_student():
+    return ensure_default_student_user()
+
 
 def _generate_login_id(grade, batch, enrollment_id):
     grade_part = f"{int(grade):02d}"
-    batch_part = str(batch)[-2:]
+    batch_part = str(batch or "00")[-2:].zfill(2)
     roll_part = f"{int(enrollment_id):02d}"
     return f"VM-{grade_part}-{batch_part}00{roll_part}"
 
 
 def create_student_user(name, grade, batch, enrollment_id):
     student_id = str(uuid.uuid4())
-    login_id = _generate_login_id(grade, batch, enrollment_id)
+    normalized_batch = batch or "00"
+    login_id = _generate_login_id(grade, normalized_batch, enrollment_id)
+    temp_password = _generate_temp_password()
 
-    c = conn()
-    cur = c.cursor()
+    with get_connection() as connection:
+        existing_user = connection.execute(
+            "SELECT id FROM users WHERE login_id = ? LIMIT 1",
+            (login_id,),
+        ).fetchone()
+        if existing_user:
+            raise ValueError(
+                f"Login ID already exists for this student pattern: {login_id}"
+            )
 
-    cur.execute("""
-        INSERT INTO students (id, name, grade, batch, enrollment_id)
-        VALUES (?, ?, ?, ?, ?)
-    """, (student_id, name, grade, batch, enrollment_id))
+        connection.execute(
+            """
+            INSERT INTO students (id, name, grade, batch, enrollment_id)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (student_id, name, int(grade), normalized_batch, int(enrollment_id)),
+        )
 
-    cur.execute("""
-        INSERT INTO users (id, login_id, role, student_id, created_at, is_active)
-        VALUES (?, ?, 'student', ?, ?, 1)
-    """, (
-        str(uuid.uuid4()),
-        login_id,
-        student_id,
-        _now()
-    ))
+        connection.execute(
+            """
+            INSERT INTO users (
+                id, login_id, role, student_id, created_at, is_active, password_hash
+            )
+            VALUES (?, ?, 'student', ?, ?, 1, ?)
+            """,
+            (
+                str(uuid.uuid4()),
+                login_id,
+                student_id,
+                _now(),
+                hash_password(temp_password),
+            ),
+        )
+        connection.commit()
 
-    c.commit()
-    c.close()
-
-    return login_id
+    return login_id, temp_password
 
 
 def get_all_students():
-    c = conn()
-    cur = c.cursor()
-
-    cur.execute("""
-        SELECT s.id, s.name, s.grade, s.batch, s.enrollment_id, u.login_id
-        FROM students s
-        LEFT JOIN users u ON u.student_id = s.id AND u.role='student'
-        ORDER BY s.name
-    """)
-
-    rows = cur.fetchall()
-    c.close()
-    return rows
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                s.id,
+                s.name,
+                s.grade,
+                s.batch,
+                s.enrollment_id,
+                u.login_id
+            FROM students s
+            LEFT JOIN users u
+                ON u.student_id = s.id
+               AND u.role = 'student'
+            ORDER BY s.name
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def update_student_details(student_id, name=None, grade=None, batch=None, enrollment_id=None):
-    c = conn()
-    cur = c.cursor()
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT id, name, grade, batch, enrollment_id FROM students WHERE id = ?",
+            (student_id,),
+        ).fetchone()
 
-    cur.execute("SELECT * FROM students WHERE id=?", (student_id,))
-    row = cur.fetchone()
+        if not row:
+            return False
 
-    if not row:
-        c.close()
-        return False
+        current = dict(row)
+        new_name = name if name is not None and name != "" else current["name"]
+        new_grade = grade if grade is not None else current["grade"]
+        new_batch = batch if batch is not None and batch != "" else current["batch"]
+        new_enrollment = (
+            enrollment_id if enrollment_id is not None else current["enrollment_id"]
+        )
 
-    data = dict(row)
+        connection.execute(
+            """
+            UPDATE students
+            SET name = ?, grade = ?, batch = ?, enrollment_id = ?
+            WHERE id = ?
+            """,
+            (new_name, new_grade, new_batch, new_enrollment, student_id),
+        )
 
-    new_name = name if name else data["name"]
-    new_grade = grade if grade else data["grade"]
-    new_batch = batch if batch else data["batch"]
-    new_enr = enrollment_id if enrollment_id else data["enrollment_id"]
-
-    cur.execute("""
-        UPDATE students
-        SET name=?, grade=?, batch=?, enrollment_id=?
-        WHERE id=?
-    """, (new_name, new_grade, new_batch, new_enr, student_id))
-
-    new_login = _generate_login_id(new_grade, new_batch, new_enr)
-
-    cur.execute("""
-        UPDATE users SET login_id=?
-        WHERE student_id=? AND role='student'
-    """, (new_login, student_id))
-
-    c.commit()
-    c.close()
-    return True
+        new_login = _generate_login_id(new_grade, new_batch or "00", new_enrollment)
+        connection.execute(
+            """
+            UPDATE users
+            SET login_id = ?
+            WHERE student_id = ? AND role = 'student'
+            """,
+            (new_login, student_id),
+        )
+        connection.commit()
+        return True
 
 
 def delete_student_account(student_id):
-    c = conn()
-    cur = c.cursor()
+    with get_connection() as connection:
+        connection.execute("DELETE FROM attempts WHERE student_id = ?", (student_id,))
+        connection.execute("DELETE FROM t20_attempts WHERE student_id = ?", (student_id,))
+        connection.execute("DELETE FROM users WHERE student_id = ?", (student_id,))
+        result = connection.execute("DELETE FROM students WHERE id = ?", (student_id,))
+        connection.commit()
+        return result.rowcount > 0
 
-    cur.execute("DELETE FROM attempts WHERE student_id=?", (student_id,))
-    cur.execute("DELETE FROM t20_attempts WHERE student_id=?", (student_id,))
-    cur.execute("DELETE FROM users WHERE student_id=?", (student_id,))
-    cur.execute("DELETE FROM students WHERE id=?", (student_id,))
-
-    c.commit()
-    c.close()
-    return True
-
-
-# ----------------------------
-# LOGIN (NO PASSWORD)
-# ----------------------------
 
 def login_user(login_id, password=None):
-    login_id = login_id.strip()
+    login_id = (login_id or "").strip()
+    password = password or ""
 
-    # 1. Hardcoded Admin
-    if login_id == "admin" and password == "admin@123":
-        return {"role": "admin", "login_id": "admin", "student_id": None}
+    if not login_id or not password:
+        return None
 
-    # 2. Hardcoded Student
-    if login_id == "student" and password == "student@123":
-        from db import ensure_demo_student  # Import helper from db.py
-        demo_id = ensure_demo_student()
+    if login_id == DEFAULT_ADMIN_LOGIN and password == DEFAULT_ADMIN_PASSWORD:
+        ensure_default_admin()
+        with get_connection() as connection:
+            row = connection.execute(
+                """
+                SELECT id, login_id, role, student_id, is_active
+                FROM users
+                WHERE role = 'admin'
+                LIMIT 1
+                """
+            ).fetchone()
+        if row and row["is_active"]:
+            return _build_user_payload(
+                row,
+                login_id_override=DEFAULT_ADMIN_LOGIN,
+            )
         return {
-            "role": "student", 
-            "login_id": "student", 
-            "student_id": demo_id, 
-            "name": "Demo Student"
+            "role": "admin",
+            "login_id": DEFAULT_ADMIN_LOGIN,
+            "student_id": None,
         }
 
-    # 3. DB Fallback
-    try:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT id, role, student_id, is_active FROM users WHERE login_id=?", (login_id,))
-            row = cur.fetchone()
-            # If using sqlite3.Row, row['role'] works.
-            if row and row['is_active']:
-                return {
-                    "user_id": row['id'], 
-                    "role": row['role'], 
-                    "student_id": row['student_id'], 
-                    "login_id": login_id
-                }
-    except Exception:
-        pass
-    return None
+    if login_id == DEFAULT_STUDENT_LOGIN and password == DEFAULT_STUDENT_PASSWORD:
+        student_id = ensure_default_student()
+        with get_connection() as connection:
+            row = connection.execute(
+                """
+                SELECT u.id, u.login_id, u.role, u.student_id, u.is_active, s.name
+                FROM users u
+                LEFT JOIN students s ON s.id = u.student_id
+                WHERE u.login_id = ?
+                LIMIT 1
+                """,
+                (DEFAULT_STUDENT_LOGIN,),
+            ).fetchone()
+        if row and row["is_active"]:
+            return _build_user_payload(
+                row,
+                login_id_override=DEFAULT_STUDENT_LOGIN,
+                name_override=row["name"] or DEFAULT_STUDENT_NAME,
+            )
+        return {
+            "role": "student",
+            "login_id": DEFAULT_STUDENT_LOGIN,
+            "student_id": student_id,
+            "name": DEFAULT_STUDENT_NAME,
+        }
 
-# ----------------------------
-# ATTEMPTS
-# ----------------------------
+    try:
+        with get_connection() as connection:
+            row = connection.execute(
+                """
+                SELECT id, login_id, role, student_id, is_active, password_hash
+                FROM users
+                WHERE login_id = ?
+                LIMIT 1
+                """,
+                (login_id,),
+            ).fetchone()
+            if not row or not row["is_active"]:
+                return None
+            if not verify_password(password, row["password_hash"]):
+                return None
+            return _build_user_payload(row)
+    except Exception:
+        return None
+
 
 def save_attempt(student_id, section, operation, level, score, total_q, avg_speed):
-    c = conn()
-    cur = c.cursor()
+    if not student_id:
+        raise ValueError("Cannot save attempt without a student_id.")
 
-    cur.execute("""
-        INSERT INTO attempts
-        (id, student_id, section, operation, level, score, total_q, avg_speed, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        str(uuid.uuid4()),
-        student_id,
-        section,
-        operation,
-        level,
-        int(score or 0),
-        int(total_q or 0),
-        float(avg_speed or 0),
-        _now()
-    ))
+    with get_connection() as connection:
+        student_row = connection.execute(
+            "SELECT id FROM students WHERE id = ? LIMIT 1",
+            (student_id,),
+        ).fetchone()
+        if not student_row:
+            raise ValueError(f"Student not found for attempt save: {student_id}")
 
-    c.commit()
-    c.close()
+        connection.execute(
+            """
+            INSERT INTO attempts
+            (id, student_id, section, operation, level, score, total_q, avg_speed, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(uuid.uuid4()),
+                student_id,
+                section,
+                operation,
+                level,
+                int(score or 0),
+                int(total_q or 0),
+                float(avg_speed or 0),
+                _now(),
+            ),
+        )
+        connection.commit()
+        return True
 
 
 def save_t20_attempt(student_id, student_name, operation, difficulty, score, total_q, avg_speed):
     if not student_id:
-        print("⚠️ Cannot save T20 attempt: Missing student_id")
+        print("Cannot save T20 attempt: missing student_id")
         return False
-        
+
     try:
-        with get_connection() as conn:
-            cur = conn.cursor()
-            attempt_id = str(uuid.uuid4())
-            created_at = datetime.utcnow().isoformat()
-            
-            cur.execute("""
+        with get_connection() as connection:
+            student_row = connection.execute(
+                "SELECT id FROM students WHERE id = ? LIMIT 1",
+                (student_id,),
+            ).fetchone()
+            if not student_row:
+                raise ValueError(f"Student not found for T20 attempt save: {student_id}")
+
+            connection.execute(
+                """
                 INSERT INTO t20_attempts (
-                    id, student_id, student_name, operation, 
+                    id, student_id, student_name, operation,
                     difficulty, score, total_q, avg_speed, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (attempt_id, student_id, student_name, operation, 
-                  difficulty, score, total_q, avg_speed, created_at))
-            conn.commit()
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    str(uuid.uuid4()),
+                    student_id,
+                    student_name,
+                    operation,
+                    difficulty,
+                    int(score or 0),
+                    int(total_q or 0),
+                    float(avg_speed or 0),
+                    _now(),
+                ),
+            )
+            connection.commit()
             return True
-    
-    except Exception as e:
-        print(f"❌ Error saving T20 attempt: {e}")
+    except Exception as exc:
+        print(f"Error saving T20 attempt: {exc}")
         return False
 
-
-# ----------------------------
-# ANALYTICS
-# ----------------------------
 
 def get_student_progress():
-    c = conn()
-    cur = c.cursor()
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            WITH combined_attempts AS (
+                SELECT
+                    student_id,
+                    score,
+                    created_at
+                FROM attempts
+                UNION ALL
+                SELECT
+                    student_id,
+                    score,
+                    created_at
+                FROM t20_attempts
+            )
+            SELECT
+                s.id,
+                s.name,
+                s.grade,
+                s.batch,
+                s.enrollment_id,
+                u.login_id,
+                COUNT(ca.student_id) AS attempts_count,
+                COALESCE(AVG(ca.score), 0) AS avg_score,
+                COALESCE(MAX(ca.score), 0) AS best_score,
+                (
+                    SELECT ca2.score
+                    FROM combined_attempts ca2
+                    WHERE ca2.student_id = s.id
+                    ORDER BY ca2.created_at DESC
+                    LIMIT 1
+                ) AS last_score,
+                (
+                    SELECT ca3.created_at
+                    FROM combined_attempts ca3
+                    WHERE ca3.student_id = s.id
+                    ORDER BY ca3.created_at DESC
+                    LIMIT 1
+                ) AS last_attempt_at
+            FROM students s
+            LEFT JOIN users u
+                ON u.student_id = s.id
+               AND u.role = 'student'
+            LEFT JOIN combined_attempts ca
+                ON ca.student_id = s.id
+            GROUP BY s.id, s.name, s.grade, s.batch, s.enrollment_id, u.login_id
+            ORDER BY attempts_count DESC, s.name ASC
+            """
+        ).fetchall()
 
-    cur.execute("""
-        SELECT
-            s.name,
-            COUNT(a.id),
-            COALESCE(AVG(a.score), 0),
-            COALESCE(MAX(a.score), 0)
-        FROM students s
-        LEFT JOIN attempts a ON a.student_id = s.id
-        GROUP BY s.id
-        ORDER BY COUNT(a.id) DESC
-    """)
+    return [dict(row) for row in rows]
 
-    rows = cur.fetchall()
-    c.close()
-
-    return [
-        {
-            "name": r[0],
-            "attempts": r[1],
-            "avg_score": r[2],
-            "best_score": r[3],
-        }
-        for r in rows
-    ]
-
-
-# ----------------------------
-# FILE MANAGEMENT
-# ----------------------------
 
 def upload_file(filename, content, file_type=None, description=None):
-    c = conn()
-    cur = c.cursor()
-
     file_id = str(uuid.uuid4())
-
-    cur.execute("""
-        INSERT INTO files
-        (id, filename, file_content, file_type, description, uploaded_at, is_active)
-        VALUES (?, ?, ?, ?, ?, ?, 1)
-    """, (
-        file_id,
-        filename,
-        content,
-        file_type,
-        description,
-        _now()
-    ))
-
-    c.commit()
-    c.close()
-
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO files
+            (id, filename, file_content, file_type, description, uploaded_at, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, 1)
+            """,
+            (
+                file_id,
+                filename,
+                content,
+                file_type,
+                description,
+                _now(),
+            ),
+        )
+        connection.commit()
     return file_id
 
 
 def get_all_files():
-    c = conn()
-    cur = c.cursor()
-
-    cur.execute("""
-        SELECT id, filename, file_type, description, uploaded_at
-        FROM files WHERE is_active=1
-    """)
-
-    rows = cur.fetchall()
-    c.close()
-
-    return [dict(r) for r in rows]
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT id, filename, file_type, description, uploaded_at
+            FROM files
+            WHERE is_active = 1
+            """
+        ).fetchall()
+    return [dict(row) for row in rows]
 
 
 def soft_delete_file(file_id):
-    c = conn()
-    cur = c.cursor()
-
-    cur.execute("UPDATE files SET is_active=0 WHERE id=?", (file_id,))
-    c.commit()
-    c.close()
+    with get_connection() as connection:
+        connection.execute("UPDATE files SET is_active = 0 WHERE id = ?", (file_id,))
+        connection.commit()
     return True
 
+
 def get_detailed_analytics(student_id):
-    c = conn()
-    cur = c.cursor()
-
-    cur.execute("""
-        SELECT section, operation, level, score, total_q, avg_speed, created_at
-        FROM attempts
-        WHERE student_id=?
-        ORDER BY created_at DESC
-    """, (student_id,))
-
-    rows = cur.fetchall()
-    c.close()
+    with get_connection() as connection:
+        rows = connection.execute(
+            """
+            SELECT
+                section,
+                operation,
+                level,
+                score,
+                total_q,
+                avg_speed,
+                created_at
+            FROM attempts
+            WHERE student_id = ?
+            UNION ALL
+            SELECT
+                'T20' AS section,
+                operation,
+                CASE
+                    WHEN LOWER(COALESCE(difficulty, '')) = 'hard' THEN 2
+                    ELSE 1
+                END AS level,
+                score,
+                total_q,
+                avg_speed,
+                created_at
+            FROM t20_attempts
+            WHERE student_id = ?
+            ORDER BY created_at DESC
+            """,
+            (student_id, student_id),
+        ).fetchall()
 
     analytics = []
-    for r in rows:
-        analytics.append({
-            "section": r[0],
-            "topic": r[1],
-            "level": r[2],
-            "sub_level": r[2],
-            "score": r[3],
-            "total_q": r[4],
-            "accuracy": round(r[3] / r[4], 4) if r[4] else 0,
-            "avg_speed": r[5],
-            "time_per_q": r[5],
-            "date": r[6],
-        })
+    for row in rows:
+        analytics.append(
+            {
+                "section": row["section"],
+                "topic": row["operation"],
+                "level": row["level"],
+                "sub_level": row["level"],
+                "score": row["score"],
+                "total_q": row["total_q"],
+                "accuracy": round(row["score"] / row["total_q"], 4) if row["total_q"] else 0,
+                "avg_speed": row["avg_speed"],
+                "time_per_q": row["avg_speed"],
+                "date": row["created_at"],
+            }
+        )
 
     return analytics
 
+
 def reset_student_analytics(student_id):
-    c = conn()
-    cur = c.cursor()
+    with get_connection() as connection:
+        deleted_attempts = connection.execute(
+            "DELETE FROM attempts WHERE student_id = ?",
+            (student_id,),
+        ).rowcount
+        deleted_t20 = connection.execute(
+            "DELETE FROM t20_attempts WHERE student_id = ?",
+            (student_id,),
+        ).rowcount
+        connection.commit()
+    return deleted_attempts + deleted_t20
 
-    cur.execute("DELETE FROM attempts WHERE student_id=?", (student_id,))
-    deleted = cur.rowcount
-
-    cur.execute("DELETE FROM t20_attempts WHERE student_id=?", (student_id,))
-    deleted += cur.rowcount
-
-    c.commit()
-    c.close()
-
-    return deleted
 
 def get_admin_user():
-    c = conn()
-    cur = c.cursor()
+    with get_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT id, login_id, is_active
+            FROM users
+            WHERE role = 'admin'
+            LIMIT 1
+            """
+        ).fetchone()
+    return _row_to_dict(row)
 
-    cur.execute("""
-        SELECT id, login_id, is_active
-        FROM users
-        WHERE role='admin'
-        LIMIT 1
-    """)
-
-    row = cur.fetchone()
-    c.close()
-
-    if not row:
-        return None
-
-    return {
-        "id": row["id"],
-        "login_id": row["login_id"],
-        "is_active": row["is_active"],
-    }
 
 def get_student(student_id):
-    c = conn()
-    cur = c.cursor()
+    with get_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT id, name, grade, batch, enrollment_id
+            FROM students
+            WHERE id = ?
+            """,
+            (student_id,),
+        ).fetchone()
+    return _row_to_dict(row)
 
-    cur.execute("""
-        SELECT id, name, grade, batch, enrollment_id
-        FROM students
-        WHERE id=?
-    """, (student_id,))
 
-    row = cur.fetchone()
-    c.close()
-
-    if not row:
-        return None
-
-    return dict(row)
-
-def update_admin_credentials(new_login=None):
-    if new_login is None:
+def update_admin_credentials(new_login=None, new_password=None):
+    if new_login is None and new_password is None:
         return False
 
-    c = conn()
-    cur = c.cursor()
-
-    cur.execute("SELECT id FROM users WHERE role='admin' LIMIT 1")
-    row = cur.fetchone()
-
-    if not row:
-        c.close()
-        return False
-
-    admin_id = row["id"]
-
-    try:
-        cur.execute("""
-            UPDATE users SET login_id=?
-            WHERE id=?
-        """, (new_login, admin_id))
-
-        c.commit()
-        c.close()
-        return True
-
-    except Exception:
-        c.rollback()
-        c.close()
-        raise
-
-def get_file_by_id(file_id: str):
-    """Return a single file row, including content, or None."""
-    c = conn()
-    cur = c.cursor()
-
-    cur.execute(
-        """
-        SELECT id, filename, file_content, file_type, description, uploaded_at, is_active
-        FROM files
-        WHERE id = ?
-        """,
-        (file_id,),
-    )
-
-    row = cur.fetchone()
-    cur.close()
-    c.close()
-
-    if not row:
-        return None
-
-    # If using sqlite3.Row (recommended)
-    if hasattr(row, "keys"):
-        return dict(row)
-
-    # Fallback for tuple
-    return {
-        "id": row[0],
-        "filename": row[1],
-        "file_content": row[2],
-        "file_type": row[3],
-        "description": row[4],
-        "uploaded_at": row[5],
-        "is_active": row[6],
-    }
-
-def hard_delete_file(file_id: str) -> bool:
-    """Completely remove a file row from DB."""
-    c = conn()
-    cur = c.cursor()
-
-    try:
-        # Check if file exists
-        cur.execute("SELECT 1 FROM files WHERE id = ?", (file_id,))
-        if not cur.fetchone():
-            cur.close()
-            c.close()
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT id FROM users WHERE role = 'admin' LIMIT 1"
+        ).fetchone()
+        if not row:
             return False
 
-        # Delete the file
-        cur.execute("DELETE FROM files WHERE id = ?", (file_id,))
-        c.commit()
+        updates = []
+        params = []
 
-        cur.close()
-        c.close()
+        if new_login is not None:
+            updates.append("login_id = ?")
+            params.append(new_login)
+
+        if new_password is not None:
+            updates.append("password_hash = ?")
+            params.append(hash_password(new_password))
+
+        if not updates:
+            return False
+
+        params.append(row["id"])
+        connection.execute(
+            f"UPDATE users SET {', '.join(updates)} WHERE id = ?",
+            params,
+        )
+        connection.commit()
         return True
 
-    except Exception:
-        c.rollback()
-        cur.close()
-        c.close()
-        raise
+
+def get_file_by_id(file_id):
+    with get_connection() as connection:
+        row = connection.execute(
+            """
+            SELECT id, filename, file_content, file_type, description, uploaded_at, is_active
+            FROM files
+            WHERE id = ?
+            """,
+            (file_id,),
+        ).fetchone()
+    return _row_to_dict(row)
+
+
+def hard_delete_file(file_id):
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT 1 FROM files WHERE id = ?",
+            (file_id,),
+        ).fetchone()
+        if not row:
+            return False
+
+        connection.execute("DELETE FROM files WHERE id = ?", (file_id,))
+        connection.commit()
+        return True

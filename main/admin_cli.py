@@ -3,15 +3,11 @@ from models import create_student_user, get_all_students, update_student_details
 
 
 def prompt_int(prompt, default=None):
-    v = input(prompt).strip()
-    if v == "":
+    value = input(prompt).strip()
+    if value == "":
         return default
-    return int(v)
+    return int(value)
 
-
-# ----------------------------
-# CREATE STUDENT
-# ----------------------------
 
 def create_flow():
     print("=== Add Student (Admin) ===")
@@ -23,21 +19,18 @@ def create_flow():
     enrollment = input("Enrollment / Roll (optional): ").strip() or None
     enrollment = int(enrollment) if enrollment else None
 
-    login_id = create_student_user(
+    login_id, temp_password = create_student_user(
         name=name,
         grade=grade,
         batch=batch,
         enrollment_id=enrollment,
     )
 
-    print("\n✅ Student created!")
+    print("\nStudent created.")
     print("Login ID:", login_id)
-    print("NOTE: Share this Login ID with student.\n")
+    print("Password:", temp_password)
+    print("Share these credentials with the student.\n")
 
-
-# ----------------------------
-# EDIT STUDENT
-# ----------------------------
 
 def edit_flow():
     students = get_all_students()
@@ -48,63 +41,47 @@ def edit_flow():
 
     print("\nSelect a student to edit:\n")
 
-    for i, s in enumerate(students, start=1):
-        if isinstance(s, dict) or hasattr(s, "keys"):
-            sid = s.get("id")
-            name = s.get("name")
-            grade = s.get("grade")
-            batch = s.get("batch")
-            enr = s.get("enrollment_id")
-            login = s.get("login_id")
-        else:
-            sid, name, grade, batch, enr, login = s
-
-        print(f"{i}. {name} | Grade: {grade} | Batch: {batch} | Roll: {enr} | Login: {login}")
+    for index, student in enumerate(students, start=1):
+        print(
+            f"{index}. {student.get('name')} | Grade: {student.get('grade')} | "
+            f"Batch: {student.get('batch')} | Roll: {student.get('enrollment_id')} | "
+            f"Login: {student.get('login_id')}"
+        )
 
     try:
         choice = int(input("\nEnter number: ").strip())
         if choice < 1 or choice > len(students):
             print("Invalid choice")
             return
-    except:
+    except ValueError:
         print("Invalid input")
         return
 
-    sel = students[choice - 1]
-
-    if isinstance(sel, dict) or hasattr(sel, "keys"):
-        sid = sel.get("id")
-        cur_name = sel.get("name")
-        cur_grade = sel.get("grade")
-        cur_batch = sel.get("batch")
-        cur_enr = sel.get("enrollment_id")
-    else:
-        sid, cur_name, cur_grade, cur_batch, cur_enr, _ = sel
+    selected = students[choice - 1]
 
     print("\nLeave blank to keep existing value.\n")
 
-    new_name = input(f"Name [{cur_name}]: ").strip() or None
-    new_grade = prompt_int(f"Grade [{cur_grade}]: ", default=None)
-    new_batch = input(f"Batch [{cur_batch}]: ").strip() or None
-    new_enr = prompt_int(f"Enrollment / Roll [{cur_enr}]: ", default=None)
+    new_name = input(f"Name [{selected.get('name')}]: ").strip() or None
+    new_grade = prompt_int(f"Grade [{selected.get('grade')}]: ", default=None)
+    new_batch = input(f"Batch [{selected.get('batch')}]: ").strip() or None
+    new_enrollment = prompt_int(
+        f"Enrollment / Roll [{selected.get('enrollment_id')}]: ",
+        default=None,
+    )
 
     success = update_student_details(
-        sid,
+        selected.get("id"),
         name=new_name,
         grade=new_grade,
         batch=new_batch,
-        enrollment_id=new_enr,
+        enrollment_id=new_enrollment,
     )
 
     if success:
-        print("✅ Student updated successfully.")
+        print("Student updated successfully.")
     else:
-        print("❌ Failed to update student.")
+        print("Failed to update student.")
 
-
-# ----------------------------
-# MAIN MENU
-# ----------------------------
 
 def main():
     init_db()
