@@ -11,14 +11,14 @@ from models import get_detailed_analytics, reset_student_analytics
 
 FONT_FAMILY_UI = "Segoe UI"
 PERFORMANCE_GROWTH_BASE = math.log((math.pi ** 2) - 5)
-PAGE_BG = "#f4f7fb"
-SURFACE_BG = "#ffffff"
-SURFACE_ALT_BG = "#eef4fb"
-ACCENT_BLUE = "#1f5aa6"
-ACCENT_TEAL = "#1e8f8f"
-TEXT_PRIMARY = "#1f2a37"
-TEXT_SECONDARY = "#5b6777"
-OUTLINE = "#d8e2ef"
+PAGE_BG = "#07111F"
+SURFACE_BG = "#0D1A2C"
+SURFACE_ALT_BG = "#13253C"
+ACCENT_BLUE = "#73C9FF"
+ACCENT_TEAL = "#FF8A2B"
+TEXT_PRIMARY = "#F4F8FF"
+TEXT_SECONDARY = "#8FA7C3"
+OUTLINE = "#1D3652"
 
 
 class DetailedAnalyticsWindow(tk.Toplevel):
