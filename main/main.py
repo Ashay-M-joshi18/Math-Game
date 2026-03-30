@@ -4,6 +4,7 @@ from tkinter import font as tkfont
 from PIL import Image, ImageTk, ImageDraw, ImageFont
 import os
 import time
+import math
 from PIL.ImageChops import screen
 from dotenv import load_dotenv
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
@@ -15,6 +16,14 @@ import csv
 import cv2
 from db import init_db
 from ui_analytics import DetailedAnalyticsWindow
+try:
+    from qt_splash import run_qt_splash
+except Exception:
+    run_qt_splash = None
+try:
+    from qt_portal import run_qt_portal
+except Exception:
+    run_qt_portal = None
 from models import (
     create_student_user,
     login_user,
@@ -305,6 +314,11 @@ class AsteroidMathGame:
             pass
         self._start_screen_resize_job = None
         self._start_screen_widgets = {}
+        self.splash_animation_job = None
+        self.splash_finish_job = None
+        self.splash_started_at = None
+        self.splash_starfield = []
+        self.splash_starfield_size = None
         self.game_start_countdown_job = None
         self.game_start_countdown_canvas = None
         self.game_start_countdown_photo = None
@@ -374,7 +388,7 @@ class AsteroidMathGame:
         self.advanced_questions_file = os.path.join(PROJECT_ROOT, "assets", "advanced_questions.txt")
         self.load_default_advanced_questions()
         
-        self.show_splash_screen()
+        self.show_start_screen()
 
     # -------- Advanced Maths questions loading helpers --------
 
@@ -459,6 +473,7 @@ class AsteroidMathGame:
         self.advanced_questions = questions
 
     def clear_screen(self):
+        self._cancel_splash_animation()
         self._cancel_game_start_countdown()
         self._cancel_screen_shake()
         if self._start_screen_resize_job is not None:
@@ -642,6 +657,41 @@ class AsteroidMathGame:
     def _sy(self, y):
         return int(y * self._canvas_scale_y())
 
+    def _create_round_rectangle(self, x1, y1, x2, y2, radius=24, **kwargs):
+        """Draw a rounded rectangle on the active canvas."""
+        radius = max(0, int(radius))
+        max_radius = int(min((x2 - x1) / 2, (y2 - y1) / 2))
+        radius = min(radius, max_radius)
+
+        points = [
+            x1 + radius, y1,
+            x1 + radius, y1,
+            x2 - radius, y1,
+            x2 - radius, y1,
+            x2, y1,
+            x2, y1 + radius,
+            x2, y1 + radius,
+            x2, y2 - radius,
+            x2, y2 - radius,
+            x2, y2,
+            x2 - radius, y2,
+            x2 - radius, y2,
+            x1 + radius, y2,
+            x1 + radius, y2,
+            x1, y2,
+            x1, y2 - radius,
+            x1, y2 - radius,
+            x1, y1 + radius,
+            x1, y1 + radius,
+            x1, y1,
+        ]
+        return self.canvas.create_polygon(
+            points,
+            smooth=True,
+            splinesteps=36,
+            **kwargs,
+        )
+
     def draw_bg(self, width=None, height=None):
         if not hasattr(self, "canvas") or not self.canvas.winfo_exists():
             return
@@ -657,44 +707,46 @@ class AsteroidMathGame:
 
         target_size = (max(1, int(width)), max(1, int(height)))
         if self._bg_cache_size != target_size:
-            bg_img = Image.new("RGBA", target_size, "#050B18")
-
-            if self.bg_image_raw is not None:
-                source = self.bg_image_raw
-                resampling = getattr(Image, "Resampling", Image)
-                scale = max(target_size[0] / source.width, target_size[1] / source.height)
-                resized = source.resize(
-                    (
-                        max(1, int(source.width * scale)),
-                        max(1, int(source.height * scale)),
-                    ),
-                    resampling.LANCZOS,
-                )
-
-                left = max(0, (resized.width - target_size[0]) // 2)
-                top = max(0, (resized.height - target_size[1]) // 2)
-                bg_img = resized.crop(
-                    (
-                        left,
-                        top,
-                        left + target_size[0],
-                        top + target_size[1],
-                    )
-                ).convert("RGBA")
-
-            overlay = Image.new("RGBA", target_size, (5, 10, 22, 145))
-            bg_img = Image.alpha_composite(bg_img, overlay)
+            bg_img = Image.new("RGBA", target_size, "#110A2E")
 
             gradient = Image.new("RGBA", target_size, (0, 0, 0, 0))
             gradient_draw = ImageDraw.Draw(gradient)
             max_height = max(1, target_size[1] - 1)
             for y in range(target_size[1]):
-                top_mix = 18 + int(48 * (y / max_height))
+                blend = y / max_height
+                r = int(24 + ((5 - 24) * blend))
+                g = int(16 + ((14 - 16) * blend))
+                b = int(68 + ((36 - 68) * blend))
                 gradient_draw.line(
                     (0, y, target_size[0], y),
-                    fill=(4, 12, 28, top_mix),
+                    fill=(r, g, b, 255),
                 )
             bg_img = Image.alpha_composite(bg_img, gradient)
+
+            glow_overlay = Image.new("RGBA", target_size, (0, 0, 0, 0))
+            glow_draw = ImageDraw.Draw(glow_overlay)
+            glow_specs = [
+                ((-120, 10, int(target_size[0] * 0.38), int(target_size[1] * 0.36)), (87, 47, 196)),
+                ((int(target_size[0] * 0.62), 40, target_size[0] + 110, int(target_size[1] * 0.34)), (31, 84, 198)),
+                ((int(target_size[0] * 0.22), int(target_size[1] * 0.62), int(target_size[0] * 0.72), target_size[1] + 140), (12, 126, 196)),
+            ]
+            for bounds, color in glow_specs:
+                for step in range(6):
+                    inset = step * 18
+                    alpha = max(10, 58 - (step * 8))
+                    x0 = bounds[0] + inset
+                    y0 = bounds[1] + inset
+                    x1 = bounds[2] - inset
+                    y1 = bounds[3] - inset
+                    if x1 < x0:
+                        x0, x1 = x1, x0
+                    if y1 < y0:
+                        y0, y1 = y1, y0
+                    glow_draw.ellipse(
+                        (x0, y0, x1, y1),
+                        fill=color + (alpha,),
+                    )
+            bg_img = Image.alpha_composite(bg_img, glow_overlay)
 
             star_draw = ImageDraw.Draw(bg_img)
             star_count = max(45, (target_size[0] * target_size[1]) // 18000)
@@ -747,16 +799,46 @@ class AsteroidMathGame:
         def _clamp(value, low, high):
             return max(low, min(high, value))
 
-        title_size = int(_clamp(min_side * 0.074, 28, 60))
-        subtitle_size = int(_clamp(min_side * 0.027, 11, 18))
-        button_size = int(_clamp(min_side * 0.038, 12, 22))
+        palette = {
+            "glow_left": "#251652",
+            "glow_right": "#123C88",
+            "panel_shadow": "#050819",
+            "panel_fill": "#0E4B78",
+            "panel_outline": "#38D1FF",
+            "panel_inner": "#1F77AF",
+            "panel_line": "#47D7FF",
+            "hero_badge_fill": "#173C73",
+            "hero_badge_outline": "#58E1FF",
+            "hero_badge_text": "#B9F7FF",
+            "title_shadow": "#0A2566",
+            "title_fill": "#5BCBFF",
+            "hero_line": "#F7FBFF",
+            "hero_body": "#D5EAFF",
+            "moon_fill": "#EAF38A",
+            "moon_crater": "#B6DE5D",
+            "orbit": "#59D8FF",
+            "spark": "#FFF3A7",
+            "chip_text": "#F2FAFF",
+            "portal_card_fill": "#0D5B84",
+            "portal_card_outline": "#38D1FF",
+            "portal_text": "#F6FBFF",
+            "portal_body": "#DAECFF",
+            "caption": "#AFD0F0",
+            "footer": "#C7DDF3",
+            "footer_small": "#89A9CA",
+        }
+
+        eyebrow_size = int(_clamp(min_side * 0.019, 10, 14))
+        title_size = int(_clamp(min_side * 0.080, 30, 64))
+        hero_size = int(_clamp(min_side * 0.035, 14, 24))
+        subtitle_size = int(_clamp(min_side * 0.024, 10, 17))
+        portal_heading_size = int(_clamp(min_side * 0.030, 14, 20))
+        portal_title_size = int(_clamp(min_side * 0.025, 11, 17))
         footer_size = int(_clamp(min_side * 0.020, 9, 14))
         footer_small_size = int(_clamp(min_side * 0.017, 8, 12))
-        button_width_chars = int(_clamp(canvas_width / 60, 16, 24))
+        button_size = int(_clamp(min_side * 0.034, 12, 20))
+        button_width_chars = int(_clamp(canvas_width / 70, 14, 20))
 
-        button_gap = int(_clamp(canvas_height * 0.10, 62, 104))
-        button_spacing = int(_clamp(min_side * 0.04, 20, 32))
-        button_step = button_gap + button_spacing
         footer_y = canvas_height - int(_clamp(canvas_height * 0.055, 38, 58))
         footer_small_y = canvas_height - int(_clamp(canvas_height * 0.030, 20, 34))
 
@@ -771,107 +853,605 @@ class AsteroidMathGame:
         self.canvas.delete("all")
         self.draw_bg(width=canvas_width, height=canvas_height)
 
-        panel_width = int(min(canvas_width * 0.78, 760))
-        panel_height = int(min(canvas_height * 0.60, 520))
+        panel_width = int(min(canvas_width * 0.88, 1120))
+        panel_height = int(min(canvas_height * 0.72, 650))
         panel_x1 = int(center_x - (panel_width / 2))
-        panel_y1 = int(max(self._sy(74), canvas_height * 0.12))
+        panel_y1 = int(max(self._sy(56), canvas_height * 0.10))
         panel_x2 = int(center_x + (panel_width / 2))
-        panel_y2 = int(min(canvas_height - self._sy(92), panel_y1 + panel_height))
-        self.canvas.create_rectangle(
+        panel_y2 = int(min(canvas_height - self._sy(104), panel_y1 + panel_height))
+        panel_height = panel_y2 - panel_y1
+
+        wide_layout = panel_width >= 920
+        panel_pad_x = int(_clamp(panel_width * 0.055, 28, 56))
+        panel_pad_y = int(_clamp(panel_height * 0.085, 28, 50))
+        panel_pad_bottom = int(_clamp(panel_height * 0.085, 30, 54))
+        section_gap_sm = int(_clamp(panel_height * 0.022, 10, 16))
+        section_gap_md = int(_clamp(panel_height * 0.036, 16, 24))
+        section_gap_lg = int(_clamp(panel_height * 0.058, 24, 36))
+        column_gap = int(_clamp(panel_width * 0.034, 22, 38))
+
+        hero_left = panel_x1 + panel_pad_x
+        hero_top = panel_y1 + panel_pad_y
+        hero_width = int(panel_width * 0.46) if wide_layout else int(panel_width - (panel_pad_x * 2))
+        hero_right = hero_left + hero_width
+
+        if wide_layout:
+            portal_x1 = hero_right + column_gap
+            portal_x2 = panel_x2 - panel_pad_x
+            portal_width = portal_x2 - portal_x1
+            portal_top = hero_top + 2
+        else:
+            portal_x1 = panel_x1 + panel_pad_x
+            portal_x2 = panel_x2 - panel_pad_x
+            portal_width = portal_x2 - portal_x1
+            portal_top = hero_top + int(_clamp(panel_height * 0.34, 170, 230))
+        portal_x2 = portal_x1 + portal_width
+
+        card_gap = int(_clamp(panel_height * 0.022, 12, 18))
+        card_height = int(_clamp(panel_height * (0.19 if wide_layout else 0.13), 84, 126))
+        portal_title_block_y = portal_top
+        cards_start_y = portal_title_block_y + int(_clamp(panel_height * 0.14, 78, 96))
+
+        # Soft glows behind the main card for a playful space-console feel.
+        self.canvas.create_oval(
+            panel_x1 - int(panel_width * 0.10),
+            panel_y1 - int(panel_height * 0.10),
+            panel_x1 + int(panel_width * 0.30),
+            panel_y1 + int(panel_height * 0.36),
+            fill=palette["glow_left"],
+            outline="",
+        )
+        self.canvas.create_oval(
+            panel_x2 - int(panel_width * 0.28),
+            panel_y1 + int(panel_height * 0.04),
+            panel_x2 + int(panel_width * 0.10),
+            panel_y1 + int(panel_height * 0.38),
+            fill=palette["glow_right"],
+            outline="",
+        )
+
+        self._create_round_rectangle(
+            panel_x1 + 12,
+            panel_y1 + 16,
+            panel_x2 + 12,
+            panel_y2 + 16,
+            radius=38,
+            fill=palette["panel_shadow"],
+            outline="",
+        )
+        self._create_round_rectangle(
             panel_x1,
             panel_y1,
             panel_x2,
             panel_y2,
-            fill="#091726",
-            outline="#1D395A",
+            radius=38,
+            fill=palette["panel_fill"],
+            outline=palette["panel_outline"],
             width=2,
         )
-        self.canvas.create_rectangle(
-            panel_x1 + 20,
+        self._create_round_rectangle(
+            panel_x1 + 18,
             panel_y1 + 18,
-            panel_x2 - 20,
-            panel_y1 + 24,
-            fill="#FF8A2B",
+            panel_x2 - 18,
+            panel_y2 - 18,
+            radius=30,
+            fill="",
+            outline=palette["panel_inner"],
+            width=1,
+        )
+        self.canvas.create_line(
+            panel_x1 + 42,
+            panel_y1 + 28,
+            panel_x2 - 42,
+            panel_y1 + 28,
+            fill=palette["panel_line"],
+            width=5,
+        )
+
+        if not wide_layout:
+            compact_center_x = center_x
+            compact_title_y = hero_top + int(_clamp(panel_height * 0.10, 58, 72))
+            compact_subtitle_y = compact_title_y + title_size + section_gap_sm
+            compact_chip_y = compact_subtitle_y + section_gap_lg
+            compact_portal_y = compact_chip_y + section_gap_lg
+            compact_cards_top = compact_portal_y + section_gap_md + 8
+            compact_card_gap = int(_clamp(panel_height * 0.022, 10, 14))
+            compact_card_height = int(
+                max(
+                    82,
+                    min(
+                        94,
+                        ((panel_y2 - panel_pad_bottom) - compact_cards_top - (2 * compact_card_gap)) / 3,
+                    ),
+                )
+            )
+
+            planet_radius = int(_clamp(min_side * 0.055, 28, 44))
+            compact_planet_x = panel_x2 - int(_clamp(panel_width * 0.16, 62, 86))
+            compact_planet_y = hero_top + int(_clamp(panel_height * 0.03, 8, 18))
+            self.canvas.create_oval(
+                compact_planet_x - planet_radius,
+                compact_planet_y - planet_radius,
+                compact_planet_x + planet_radius,
+                compact_planet_y + planet_radius,
+                fill=palette["moon_fill"],
+                outline="",
+            )
+            self.canvas.create_arc(
+                compact_planet_x - int(planet_radius * 1.45),
+                compact_planet_y - int(planet_radius * 0.75),
+                compact_planet_x + int(planet_radius * 1.45),
+                compact_planet_y + int(planet_radius * 0.75),
+                start=20,
+                extent=300,
+                style="arc",
+                outline=palette["orbit"],
+                width=3,
+            )
+
+            eyebrow_text = "SPACE MISSION HQ"
+            eyebrow_width = max(160, int(len(eyebrow_text) * eyebrow_size * 0.90))
+            self._create_round_rectangle(
+                compact_center_x - (eyebrow_width / 2),
+                hero_top - 16,
+                compact_center_x + (eyebrow_width / 2),
+                hero_top + 16,
+                radius=16,
+                fill=palette["hero_badge_fill"],
+                outline=palette["hero_badge_outline"],
+                width=1,
+            )
+            self.canvas.create_text(
+                compact_center_x,
+                hero_top,
+                text=eyebrow_text,
+                font=(FONT_FAMILY_UI, eyebrow_size, "bold"),
+                fill=palette["hero_badge_text"],
+            )
+            self.canvas.create_text(
+                compact_center_x + 4,
+                compact_title_y + 4,
+                text="Math Game",
+                font=(FONT_FAMILY_DISPLAY, title_size, "bold"),
+                fill=palette["title_shadow"],
+                width=int(panel_width * 0.84),
+            )
+            self.canvas.create_text(
+                compact_center_x,
+                compact_title_y,
+                text="Math Game",
+                font=(FONT_FAMILY_DISPLAY, title_size, "bold"),
+                fill=palette["title_fill"],
+                width=int(panel_width * 0.84),
+            )
+            self.canvas.create_text(
+                compact_center_x,
+                compact_subtitle_y,
+                text="Pick a bright portal and launch into quick, playful space maths.",
+                font=(FONT_FAMILY_TEXT, subtitle_size),
+                fill=palette["hero_body"],
+                width=int(panel_width * 0.78),
+            )
+
+            chip_specs = [
+                ("Quick Play", "#102A43", "#56B6FF"),
+                ("Track Scores", "#16233B", "#FF9A3D"),
+                ("T20", "#112E3B", "#5CD6C5"),
+            ]
+            chip_gap = 10
+            chip_height = 30
+            chip_widths = [
+                max(84, int(len(text) * max(7.0, subtitle_size * 0.72)) + 24)
+                for text, _, _ in chip_specs
+            ]
+            total_chip_width = sum(chip_widths) + (chip_gap * (len(chip_specs) - 1))
+            chip_x = compact_center_x - (total_chip_width / 2)
+            for (chip_text, chip_fill, chip_outline), chip_width in zip(chip_specs, chip_widths):
+                self._create_round_rectangle(
+                    chip_x,
+                    compact_chip_y - (chip_height / 2),
+                    chip_x + chip_width,
+                    compact_chip_y + (chip_height / 2),
+                    radius=int(chip_height / 2),
+                    fill=chip_fill,
+                    outline=chip_outline,
+                    width=1,
+                )
+                self.canvas.create_text(
+                    chip_x + (chip_width / 2),
+                    compact_chip_y,
+                    text=chip_text,
+                    font=(FONT_FAMILY_UI, max(9, subtitle_size - 1), "bold"),
+                    fill=palette["chip_text"],
+                )
+                chip_x += chip_width + chip_gap
+
+            self.canvas.create_text(
+                compact_center_x,
+                compact_portal_y,
+                text="Choose your portal",
+                font=(FONT_FAMILY_UI, portal_heading_size, "bold"),
+                fill=palette["portal_text"],
+                width=int(panel_width * 0.82),
+            )
+
+            compact_portals = [
+                (admin_btn, "Teacher tools and student setup", "#5BB2FF"),
+                (student_btn, "Cadet practice and profile tracking", "#7CD8FF"),
+                (guest_btn, "Fast T20 sprint for instant play", "#FFB15C"),
+            ]
+            for index, (button, caption, accent_color) in enumerate(compact_portals):
+                card_y1 = compact_cards_top + (index * (compact_card_height + compact_card_gap))
+                card_y2 = card_y1 + compact_card_height
+                button_y = card_y1 + int(compact_card_height * 0.42)
+                self._create_round_rectangle(
+                    portal_x1,
+                    card_y1,
+                    portal_x2,
+                    card_y2,
+                    radius=24,
+                    fill=palette["portal_card_fill"],
+                    outline=palette["portal_card_outline"],
+                    width=2,
+                )
+                self.canvas.create_rectangle(
+                    portal_x1 + 4,
+                    card_y1 + 14,
+                    portal_x1 + 10,
+                    card_y2 - 14,
+                    fill=accent_color,
+                    outline="",
+                )
+                self.canvas.create_window(compact_center_x, button_y, window=button)
+                self.canvas.create_text(
+                    compact_center_x,
+                    card_y2 - 18,
+                    text=caption,
+                    font=(FONT_FAMILY_TEXT, max(9, subtitle_size - 1)),
+                    fill=palette["caption"],
+                    width=max(180, int(portal_width * 0.80)),
+                )
+
+            self.canvas.create_text(
+                center_x,
+                footer_y,
+                text="Built for playful practice, classroom demos, and progress-driven space adventures.",
+                font=(FONT_FAMILY_UI, footer_size),
+                fill=palette["footer"],
+                width=int(canvas_width * 0.95),
+            )
+            self.canvas.create_text(
+                center_x,
+                footer_small_y,
+                text="© 2026 SynCraft Solution",
+                font=(FONT_FAMILY_UI, footer_small_size),
+                fill=palette["footer_small"],
+                width=int(canvas_width * 0.95),
+            )
+            return
+
+        # Decorative hero art.
+        hero_art_x = hero_right - int(_clamp(hero_width * 0.09, 28, 44))
+        hero_art_y = hero_top + int(_clamp(panel_height * 0.04, 28, 40))
+        planet_radius = int(_clamp(min_side * 0.044, 26, 42))
+        self.canvas.create_oval(
+            hero_art_x - planet_radius,
+            hero_art_y - planet_radius,
+            hero_art_x + planet_radius,
+            hero_art_y + planet_radius,
+            fill=palette["moon_fill"],
             outline="",
         )
+        self.canvas.create_oval(
+            hero_art_x - int(planet_radius * 0.68),
+            hero_art_y - int(planet_radius * 0.52),
+            hero_art_x + int(planet_radius * 0.42),
+            hero_art_y + int(planet_radius * 0.58),
+            fill=palette["moon_crater"],
+            outline="",
+        )
+        self.canvas.create_arc(
+            hero_art_x - int(planet_radius * 1.5),
+            hero_art_y - int(planet_radius * 0.8),
+            hero_art_x + int(planet_radius * 1.5),
+            hero_art_y + int(planet_radius * 0.8),
+            start=20,
+            extent=300,
+            style="arc",
+            outline=palette["orbit"],
+            width=4,
+        )
+        self.canvas.create_oval(
+            hero_art_x + int(planet_radius * 0.85),
+            hero_art_y - int(planet_radius * 1.05),
+            hero_art_x + int(planet_radius * 1.18),
+            hero_art_y - int(planet_radius * 0.72),
+            fill=palette["spark"],
+            outline="",
+        )
+        self.canvas.create_line(
+            hero_art_x - int(planet_radius * 1.65),
+            hero_art_y + int(planet_radius * 1.28),
+            hero_art_x - int(planet_radius * 0.80),
+            hero_art_y + int(planet_radius * 0.52),
+            fill=palette["orbit"],
+            width=3,
+        )
+        self.canvas.create_line(
+            hero_art_x - int(planet_radius * 1.80),
+            hero_art_y + int(planet_radius * 1.44),
+            hero_art_x - int(planet_radius * 1.58),
+            hero_art_y + int(planet_radius * 1.23),
+            fill=palette["spark"],
+            width=2,
+        )
 
-        eyebrow_y = panel_y1 + int(_clamp(panel_height * 0.13, 36, 58))
-        title_y = eyebrow_y + int(_clamp(title_size * 0.92, 52, 78))
-        subtitle_y = title_y + int(_clamp(subtitle_size * 2.8, 48, 72))
+        eyebrow_x = hero_left
+        eyebrow_y = hero_top
+        eyebrow_text = "SPACE MISSION HQ"
+        eyebrow_width = max(170, int(len(eyebrow_text) * eyebrow_size * 0.86))
+        self._create_round_rectangle(
+            eyebrow_x,
+            eyebrow_y - 16,
+            eyebrow_x + eyebrow_width,
+            eyebrow_y + 16,
+            radius=16,
+            fill=palette["hero_badge_fill"],
+            outline=palette["hero_badge_outline"],
+            width=1,
+        )
         self.canvas.create_text(
-            center_x,
+            eyebrow_x + (eyebrow_width / 2),
             eyebrow_y,
-            text="SPACE CONSOLE",
-            font=(FONT_FAMILY_UI, max(10, subtitle_size - 1), "bold"),
-            fill="#73C9FF",
-            width=int(panel_width * 0.85),
+            text=eyebrow_text,
+            font=(FONT_FAMILY_UI, eyebrow_size, "bold"),
+            fill=palette["hero_badge_text"],
+        )
+
+        title_y = eyebrow_y + section_gap_lg + int(title_size * 0.42)
+        hero_line_y = title_y + int(title_size * 1.08)
+        subtitle_y = hero_line_y + int(hero_size * 1.45) + section_gap_sm
+        hero_copy_width = int(hero_width * 0.88)
+        hero_line_font_size = max(14, hero_size - 2)
+        hero_body_font_size = max(10, subtitle_size - 1)
+        hero_line_text = (
+            "Playful number missions for young space explorers"
+            if wide_layout
+            else "A bright space mission for quick math wins"
+        )
+        hero_body_text = (
+            "Jump into bright space portals, practise arithmetic with meteor rounds, and build confidence through quick wins and progress tracking."
+            if wide_layout
+            else "Pick a portal and launch straight into colourful arithmetic practice."
         )
 
         self.canvas.create_text(
-            center_x,
-            title_y,
+            hero_left + 4,
+            title_y + 4,
+            anchor="w",
             text="Math Game",
             font=(FONT_FAMILY_DISPLAY, title_size, "bold"),
-            fill="#F6FAFF",
-            width=int(panel_width * 0.85),
+            fill=palette["title_shadow"],
+            width=hero_copy_width,
         )
         self.canvas.create_text(
-            center_x,
+            hero_left,
+            title_y,
+            anchor="w",
+            text="Math Game",
+            font=(FONT_FAMILY_DISPLAY, title_size, "bold"),
+            fill=palette["title_fill"],
+            width=hero_copy_width,
+        )
+        self.canvas.create_text(
+            hero_left,
+            hero_line_y,
+            anchor="w",
+            text=hero_line_text,
+            font=(FONT_FAMILY_UI, hero_line_font_size, "bold"),
+            fill=palette["hero_line"],
+            width=hero_copy_width,
+        )
+        self.canvas.create_text(
+            hero_left,
             subtitle_y,
-            text="Fast arithmetic drills, cinematic meteor visuals, live progress tracking, and a dedicated T20 challenge mode.",
-            font=(FONT_FAMILY_TEXT, subtitle_size),
-            fill="#A8BED7",
-            width=int(panel_width * 0.76),
+            anchor="w",
+            text=hero_body_text,
+            font=(FONT_FAMILY_TEXT, hero_body_font_size),
+            fill=palette["hero_body"],
+            width=hero_copy_width,
         )
 
-        chip_y = subtitle_y + int(_clamp(panel_height * 0.14, 58, 82))
         chip_font = (FONT_FAMILY_UI, max(9, subtitle_size - 1), "bold")
-        chip_specs = [
-            (center_x - (panel_width * 0.22), "Adaptive Levels", "#13273E", "#4A88C7"),
-            (center_x, "Student Analytics", "#171F36", "#FF8A2B"),
-            (center_x + (panel_width * 0.22), "T20 Arena", "#15293A", "#63BCEB"),
-        ]
-        for chip_x, chip_text, chip_fill, chip_outline in chip_specs:
-            self.canvas.create_rectangle(
-                chip_x - 90,
-                chip_y - 18,
-                chip_x + 90,
-                chip_y + 18,
+        chip_y = subtitle_y + section_gap_lg + 4
+        chip_height = int(_clamp(panel_height * 0.07, 28, 38))
+        chip_specs = (
+            [
+                ("Quick Drills", "#102A43", "#56B6FF"),
+                ("Progress Reports", "#16233B", "#FF9A3D"),
+                ("T20 Speed Arena", "#112E3B", "#5CD6C5"),
+            ]
+            if wide_layout
+            else [
+                ("Quick Play", "#102A43", "#56B6FF"),
+                ("Track Scores", "#16233B", "#FF9A3D"),
+                ("T20", "#112E3B", "#5CD6C5"),
+            ]
+        )
+        chip_x = hero_left
+        chip_gap = int(_clamp(panel_width * 0.012, 8, 12))
+        for chip_text, chip_fill, chip_outline in chip_specs:
+            chip_width = max(118, int(len(chip_text) * max(7.2, subtitle_size * 0.74)) + 28)
+            self._create_round_rectangle(
+                chip_x,
+                chip_y - (chip_height / 2),
+                chip_x + chip_width,
+                chip_y + (chip_height / 2),
+                radius=int(chip_height / 2),
                 fill=chip_fill,
                 outline=chip_outline,
                 width=1,
             )
             self.canvas.create_text(
-                chip_x,
+                chip_x + (chip_width / 2),
                 chip_y,
                 text=chip_text,
                 font=chip_font,
-                fill="#E8F2FF",
+                fill=palette["chip_text"],
             )
+            chip_x += chip_width + chip_gap
+            if chip_x > (hero_right - 130):
+                chip_x = hero_left
+                chip_y += chip_height + chip_gap
 
-        portal_heading_y = chip_y + int(_clamp(panel_height * 0.12, 58, 84))
-        button_start_y = portal_heading_y + int(_clamp(panel_height * 0.10, 56, 78))
-        max_button_area = max(150, panel_y2 - button_start_y - 46)
-        button_step = min(button_step, max(68, max_button_area // 2))
-
+        note_y = chip_y + chip_height + section_gap_md
         self.canvas.create_text(
-            center_x,
-            portal_heading_y,
-            text="Choose your portal",
-            font=(FONT_FAMILY_UI, max(12, subtitle_size + 1), "bold"),
-            fill="#EAF1FB",
+            hero_left,
+            note_y,
+            anchor="w",
+            text="Choose a portal to launch the same game systems with a brighter, more kid-friendly mission control look.",
+            font=(FONT_FAMILY_TEXT, max(10, subtitle_size - 1)),
+            fill=palette["caption"],
+            width=hero_copy_width,
         )
 
-        self.canvas.create_window(center_x, button_start_y, window=admin_btn)
-        self.canvas.create_window(center_x, button_start_y + button_step, window=student_btn)
-        self.canvas.create_window(center_x, button_start_y + (button_step * 2), window=guest_btn)
+        portal_title_block_y = hero_top + 2
+        portal_desc_y = portal_title_block_y + portal_heading_size + section_gap_sm
+        cards_start_y = portal_desc_y + int(_clamp(panel_height * 0.08, 34, 46))
+        available_cards_height = max(300, (panel_y2 - panel_pad_bottom) - cards_start_y)
+        card_height = int(max(122, min(152, (available_cards_height - (2 * card_gap)) / 3)))
+
+        self.canvas.create_text(
+            portal_x1,
+            portal_title_block_y,
+            anchor="nw",
+            text="Choose your portal",
+            font=(FONT_FAMILY_UI, portal_heading_size, "bold"),
+            fill=palette["portal_text"],
+            width=portal_width,
+        )
+        self.canvas.create_text(
+            portal_x1,
+            portal_desc_y,
+            anchor="nw",
+            text="Each route keeps the same game logic. Only the mission entry point changes.",
+            font=(FONT_FAMILY_TEXT, max(10, subtitle_size - 1)),
+            fill=palette["caption"],
+            width=portal_width,
+        )
+
+        def draw_portal_card(y1, accent_color, badge_text, title_text, body_text, button):
+            y2 = y1 + card_height
+            card_pad_x = 20
+            card_pad_y = 18
+            badge_size = 36
+            badge_center_y = y1 + card_pad_y + int(badge_size / 2)
+            badge_left = portal_x1 + card_pad_x
+            badge_top = badge_center_y - int(badge_size / 2)
+            badge_right = badge_left + badge_size
+            badge_bottom = badge_top + badge_size
+            title_x = badge_right + 14
+            title_y = y1 + card_pad_y + 2
+            body_y = title_y + 28
+            body_width = max(160, portal_width - (title_x - portal_x1) - card_pad_x)
+            button_y = y2 - 26
+
+            self._create_round_rectangle(
+                portal_x1,
+                y1,
+                portal_x2,
+                y2,
+                radius=26,
+                fill=palette["portal_card_fill"],
+                outline=palette["portal_card_outline"],
+                width=2,
+            )
+            self.canvas.create_rectangle(
+                portal_x1 + 2,
+                y1 + 16,
+                portal_x1 + 8,
+                y2 - 16,
+                fill=accent_color,
+                outline="",
+            )
+            self.canvas.create_oval(
+                badge_left,
+                badge_top,
+                badge_right,
+                badge_bottom,
+                fill=accent_color,
+                outline="",
+            )
+            self.canvas.create_text(
+                (badge_left + badge_right) / 2,
+                (badge_top + badge_bottom) / 2,
+                text=badge_text,
+                font=(FONT_FAMILY_UI, max(9, portal_title_size - 2), "bold"),
+                fill="#102033",
+            )
+            self.canvas.create_text(
+                badge_right + 14,
+                title_y,
+                anchor="w",
+                text=title_text,
+                font=(FONT_FAMILY_UI, portal_title_size, "bold"),
+                fill=palette["portal_text"],
+                width=body_width,
+            )
+            self.canvas.create_text(
+                badge_right + 14,
+                body_y,
+                anchor="w",
+                text=body_text,
+                font=(FONT_FAMILY_TEXT, max(9, subtitle_size - 1)),
+                fill=palette["portal_body"],
+                width=body_width,
+            )
+            self.canvas.create_window(
+                (portal_x1 + portal_x2) / 2,
+                button_y,
+                window=button,
+            )
+
+        portal_cards = [
+            (
+                "#4AA7FF",
+                "A",
+                "Admin Login",
+                "Create student access, upload quiz banks, and review progress.",
+                admin_btn,
+            ),
+            (
+                "#74D1FF",
+                "S",
+                "Student Login",
+                "Play missions, track profile history, and practise by level.",
+                student_btn,
+            ),
+            (
+                "#FFAA54",
+                "T20",
+                "Guest Login (T20)",
+                "Jump straight into a fast T20 classroom sprint mode.",
+                guest_btn,
+            ),
+        ]
+        for index, (accent_color, badge_text, title_text, body_text, button) in enumerate(portal_cards):
+            draw_portal_card(
+                cards_start_y + (index * (card_height + card_gap)),
+                accent_color,
+                badge_text,
+                title_text,
+                body_text,
+                button,
+            )
 
         self.canvas.create_text(
             center_x,
             footer_y,
-            text="Built for focused practice, classroom demos, and progress-driven play.",
+            text="Built for playful practice, classroom demos, and progress-driven space adventures.",
             font=(FONT_FAMILY_UI, footer_size),
-            fill="#9FB4C9",
+            fill=palette["footer"],
             width=int(canvas_width * 0.95),
         )
         self.canvas.create_text(
@@ -879,14 +1459,381 @@ class AsteroidMathGame:
             footer_small_y,
             text="© 2026 SynCraft Solution",
             font=(FONT_FAMILY_UI, footer_small_size),
-            fill="#6E89A5",
+            fill=palette["footer_small"],
             width=int(canvas_width * 0.95),
         )
 
     # -------- Start Screen : Admin Login , Student Login , Guest Login , Footer With Credits --------
 
+    def _cancel_splash_animation(self):
+        if self.splash_animation_job is not None:
+            try:
+                self.root.after_cancel(self.splash_animation_job)
+            except tk.TclError:
+                pass
+            self.splash_animation_job = None
+        if self.splash_finish_job is not None:
+            try:
+                self.root.after_cancel(self.splash_finish_job)
+            except tk.TclError:
+                pass
+            self.splash_finish_job = None
+        self.splash_started_at = None
+
+    def _ease_out_cubic(self, value):
+        value = max(0.0, min(1.0, value))
+        return 1 - ((1 - value) ** 3)
+
+    def _ease_in_out(self, value):
+        value = max(0.0, min(1.0, value))
+        return (3 * (value ** 2)) - (2 * (value ** 3))
+
+    def _ensure_splash_starfield(self, width, height):
+        target_size = (max(1, int(width)), max(1, int(height)))
+        if self.splash_starfield_size == target_size:
+            return
+
+        splash_rng = random.Random(42)
+        stars = []
+        star_count = max(36, (target_size[0] * target_size[1]) // 24000)
+        x_min = min(24, max(0, target_size[0] // 4))
+        x_max = max(x_min, target_size[0] - x_min)
+        y_min = min(24, max(0, target_size[1] // 4))
+        y_max = max(y_min, target_size[1] - y_min)
+        for _ in range(star_count):
+            stars.append(
+                {
+                    "x": splash_rng.randint(x_min, x_max),
+                    "y": splash_rng.randint(y_min, y_max),
+                    "size": splash_rng.choice((2, 2, 3, 4)),
+                    "phase": splash_rng.uniform(0.0, math.tau),
+                    "speed": splash_rng.uniform(0.8, 1.9),
+                }
+            )
+        self.splash_starfield = stars
+        self.splash_starfield_size = target_size
+
+    def _draw_splash_star(self, x, y, size, brightness):
+        sparkle = max(1, int(size * brightness))
+        self.canvas.create_line(x - sparkle, y, x + sparkle, y, fill="#FFFFFF", width=2)
+        self.canvas.create_line(x, y - sparkle, x, y + sparkle, fill="#FFFFFF", width=2)
+        if sparkle >= 3:
+            self.canvas.create_oval(x - 1, y - 1, x + 1, y + 1, fill="#FFFFFF", outline="")
+
+    def _draw_splash_rocket(self, x, y, scale, flame_scale):
+        body_w = int(46 * scale)
+        body_h = int(112 * scale)
+        nose_h = int(28 * scale)
+        fin_w = int(20 * scale)
+        fin_h = int(28 * scale)
+        booster_w = int(14 * scale)
+        booster_h = int(18 * scale)
+        window_r = max(7, int(9 * scale))
+
+        left = x - (body_w // 2)
+        right = x + (body_w // 2)
+        top = y - (body_h // 2)
+        bottom = y + (body_h // 2)
+        body_top = top + int(body_h * 0.10)
+        body_bottom = bottom - int(body_h * 0.18)
+        skirt_top = body_bottom - int(body_h * 0.06)
+
+        # smoke trail behind the rocket
+        smoke_h = int(54 * scale * max(0.45, flame_scale))
+        smoke_w = int(18 * scale)
+        if smoke_h > 10:
+            self.canvas.create_polygon(
+                x - smoke_w,
+                bottom - 4,
+                x - int(smoke_w * 0.55),
+                bottom + int(smoke_h * 0.35),
+                x - int(smoke_w * 0.35),
+                bottom + smoke_h,
+                x + int(smoke_w * 0.35),
+                bottom + smoke_h,
+                x + int(smoke_w * 0.55),
+                bottom + int(smoke_h * 0.35),
+                x + smoke_w,
+                bottom - 4,
+                fill="#D7D4E3",
+                outline="",
+                smooth=True,
+            )
+
+        # rocket body
+        self.canvas.create_polygon(
+            x,
+            top - nose_h,
+            right - int(body_w * 0.10),
+            body_top,
+            left + int(body_w * 0.10),
+            body_top,
+            fill="#B993E6",
+            outline="#4B3567",
+            width=2,
+            smooth=True,
+        )
+        self._create_round_rectangle(
+            left,
+            body_top,
+            right,
+            body_bottom,
+            radius=max(14, int(16 * scale)),
+            fill="#9A7ACC",
+            outline="#4B3567",
+            width=2,
+        )
+        self.canvas.create_polygon(
+            left + int(body_w * 0.10),
+            body_top + int(body_h * 0.02),
+            x - int(body_w * 0.04),
+            body_top + int(body_h * 0.10),
+            x - int(body_w * 0.02),
+            body_bottom - int(body_h * 0.02),
+            left + int(body_w * 0.08),
+            body_bottom - int(body_h * 0.04),
+            fill="#7D62AD",
+            outline="",
+            smooth=True,
+        )
+        self.canvas.create_polygon(
+            x + int(body_w * 0.04),
+            body_top + int(body_h * 0.02),
+            right - int(body_w * 0.08),
+            body_top + int(body_h * 0.08),
+            right - int(body_w * 0.06),
+            body_bottom - int(body_h * 0.04),
+            x + int(body_w * 0.02),
+            body_bottom - int(body_h * 0.02),
+            fill="#C8ACEF",
+            outline="",
+            smooth=True,
+        )
+
+        # side fins
+        self.canvas.create_polygon(
+            left + int(body_w * 0.08),
+            body_bottom - int(body_h * 0.10),
+            left - fin_w,
+            bottom + fin_h,
+            x - int(body_w * 0.10),
+            skirt_top,
+            fill="#7A58B0",
+            outline="#4B3567",
+            width=2,
+            smooth=True,
+        )
+        self.canvas.create_polygon(
+            right - int(body_w * 0.08),
+            body_bottom - int(body_h * 0.10),
+            right + fin_w,
+            bottom + fin_h,
+            x + int(body_w * 0.10),
+            skirt_top,
+            fill="#7A58B0",
+            outline="#4B3567",
+            width=2,
+            smooth=True,
+        )
+
+        # engine/booster
+        self._create_round_rectangle(
+            x - (booster_w // 2),
+            skirt_top,
+            x + (booster_w // 2),
+            skirt_top + booster_h,
+            radius=max(4, int(5 * scale)),
+            fill="#52465F",
+            outline="#3B3245",
+            width=2,
+        )
+
+        # window
+        window_cy = body_top + int(body_h * 0.26)
+        self.canvas.create_oval(
+            x - (window_r + 5),
+            window_cy - (window_r + 5),
+            x + (window_r + 5),
+            window_cy + (window_r + 5),
+            fill="#5A447A",
+            outline="",
+        )
+        self.canvas.create_oval(
+            x - window_r,
+            window_cy - window_r,
+            x + window_r,
+            window_cy + window_r,
+            fill="#FFF8FF",
+            outline="",
+        )
+
+        # flame
+        flame_h = int(34 * scale * flame_scale)
+        if flame_h > 6:
+            flame_top = skirt_top + booster_h - 2
+            self.canvas.create_polygon(
+                x,
+                flame_top + flame_h,
+                x - int(10 * scale),
+                flame_top + int(flame_h * 0.30),
+                x,
+                flame_top,
+                x + int(10 * scale),
+                flame_top + int(flame_h * 0.30),
+                fill="#F1F0F5",
+                outline="",
+                smooth=True,
+            )
+
+    def _render_splash_frame(self):
+        if not hasattr(self, "canvas") or not self.canvas.winfo_exists() or self.splash_started_at is None:
+            return
+
+        width = max(1, self.canvas.winfo_width())
+        height = max(1, self.canvas.winfo_height())
+        elapsed = max(0.0, time.time() - self.splash_started_at)
+        self._ensure_splash_starfield(width, height)
+
+        self.canvas.delete("all")
+        self.canvas.configure(bg="#12091F")
+        self.canvas.create_rectangle(0, 0, width, height, fill="#15101F", outline="")
+        self.canvas.create_oval(
+            -int(width * 0.12),
+            int(height * 0.04),
+            int(width * 0.34),
+            int(height * 0.40),
+            fill="#26174F",
+            outline="",
+        )
+        self.canvas.create_oval(
+            int(width * 0.62),
+            int(height * 0.10),
+            int(width * 1.08),
+            int(height * 0.44),
+            fill="#143675",
+            outline="",
+        )
+
+        for star in self.splash_starfield:
+            twinkle = 0.55 + (0.45 * abs(math.sin((elapsed * star["speed"]) + star["phase"])))
+            self._draw_splash_star(star["x"], star["y"], star["size"], twinkle)
+
+        center_x = width / 2
+        moon_y = height * 0.44
+        moon_radius = min(width, height) * 0.18
+        moon_pop = self._ease_out_cubic(min(1.0, elapsed / 1.0))
+        moon_r = moon_radius * (0.85 + (0.15 * moon_pop))
+        self.canvas.create_oval(
+            center_x - moon_r,
+            moon_y - moon_r,
+            center_x + moon_r,
+            moon_y + moon_r,
+            fill="#F7EFD0",
+            outline="",
+        )
+        crater_specs = (
+            (-0.58, -0.22, 0.12),
+            (-0.44, 0.34, 0.09),
+            (0.46, -0.18, 0.10),
+            (0.57, 0.03, 0.12),
+            (0.42, 0.26, 0.08),
+        )
+        for dx, dy, radius_ratio in crater_specs:
+            crater_r = moon_r * radius_ratio
+            cx = center_x + (moon_r * dx)
+            cy = moon_y + (moon_r * dy)
+            self.canvas.create_oval(
+                cx - crater_r,
+                cy - crater_r,
+                cx + crater_r,
+                cy + crater_r,
+                fill="#DCCEA0",
+                outline="",
+            )
+
+        rocket_progress = min(1.0, elapsed / 1.35)
+        rocket_eased = self._ease_out_cubic(rocket_progress)
+        rocket_start_x = width * 0.46
+        rocket_end_x = width * 0.50
+        rocket_x = rocket_start_x + ((rocket_end_x - rocket_start_x) * rocket_eased)
+        rocket_x += math.sin(rocket_progress * math.pi) * (width * 0.018)
+        rocket_start_y = height + 140
+        rocket_end_y = (moon_y + moon_r) - (height * 0.02)
+        rocket_y = rocket_start_y - ((rocket_start_y - rocket_end_y) * rocket_eased)
+        rocket_scale = 0.75 + (0.20 * rocket_eased)
+        flame_scale = max(0.0, 1.0 - (rocket_progress * 0.60))
+        self._draw_splash_rocket(rocket_x, rocket_y, rocket_scale, flame_scale)
+
+        orbit_progress = self._ease_in_out(max(0.0, min(1.0, (elapsed - 0.9) / 0.9)))
+        if orbit_progress > 0:
+            orbit_extent = 260 * orbit_progress
+            self.canvas.create_arc(
+                center_x - (moon_r * 1.28),
+                moon_y - (moon_r * 0.34),
+                center_x + (moon_r * 1.28),
+                moon_y + (moon_r * 0.98),
+                start=210,
+                extent=orbit_extent,
+                style="arc",
+                outline="#FFFFFF",
+                width=6,
+            )
+
+        title_progress = self._ease_out_cubic(max(0.0, min(1.0, (elapsed - 0.95) / 0.9)))
+        if title_progress > 0:
+            title_size = int(max(34, min(88, (min(width, height) * 0.078) * (0.72 + (0.28 * title_progress)))))
+            shadow_offset = max(3, int(title_size * 0.07))
+            title_y = moon_y - (moon_r * 0.05)
+            self.canvas.create_text(
+                center_x - shadow_offset,
+                title_y + shadow_offset,
+                text="Math\nGame",
+                font=(FONT_FAMILY_DISPLAY, title_size, "bold"),
+                fill="#FFFFFF",
+                justify="center",
+            )
+            self.canvas.create_text(
+                center_x,
+                title_y,
+                text="Math\nGame",
+                font=(FONT_FAMILY_DISPLAY, title_size, "bold"),
+                fill="#2E2C37",
+                justify="center",
+            )
+            subtitle_size = max(12, int(title_size * 0.26))
+            self.canvas.create_text(
+                center_x,
+                moon_y + (moon_r * 0.82),
+                text="Ready for launch",
+                font=(FONT_FAMILY_UI, subtitle_size, "bold"),
+                fill="#FFF8DD",
+            )
+
+        self.canvas.create_text(
+            center_x,
+            height - 46,
+            text="SynCraft Solution",
+            font=(FONT_FAMILY_UI, 11, "bold"),
+            fill="#D4D8F7",
+        )
+
+        if elapsed < 2.7:
+            self.splash_animation_job = self.root.after(33, self._render_splash_frame)
+        else:
+            self.splash_animation_job = None
+
     def show_splash_screen(self):
-        self.show_start_screen()
+        self._cancel_splash_animation()
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        self.canvas = tk.Canvas(self.root, highlightthickness=0, bg=SPLASH_BG_COLOR)
+        self.canvas.pack(fill="both", expand=True)
+        self.splash_started_at = time.time()
+        self.splash_starfield = []
+        self.splash_starfield_size = None
+        self._render_splash_frame()
+        self.splash_finish_job = self.root.after(2800, self.show_start_screen)
 
     def play_video_frame(self):
         ret, frame = self.video_cap.read()
@@ -913,7 +1860,8 @@ class AsteroidMathGame:
             self.video_cap.release()
             self.show_start_screen()
 
-    def show_start_screen(self):
+    def _show_legacy_start_screen(self):
+        self._cancel_splash_animation()
         self.game_active = False
         # Reset any special mode flags when returning home
         self.is_t20_mode = False
@@ -930,6 +1878,8 @@ class AsteroidMathGame:
             highlightthickness=0
         )
         self.canvas.pack(fill="both", expand=True)
+        self._bg_cache_size = None
+        self._bg_cache_photo = None
 
         self._start_screen_widgets = {
             "admin_btn": self._create_glossy_button(
@@ -938,7 +1888,7 @@ class AsteroidMathGame:
                 width=19,
                 font=(FONT_FAMILY_UI, 16, "bold"),
                 parent=self.root,
-                variant="blue",
+                variant="amber",
             ),
             "student_btn": self._create_glossy_button(
                 text="Student Login",
@@ -946,7 +1896,7 @@ class AsteroidMathGame:
                 width=19,
                 font=(FONT_FAMILY_UI, 16, "bold"),
                 parent=self.root,
-                variant="green",
+                variant="amber",
             ),
             "guest_btn": self._create_glossy_button(
                 text="Guest Login (T20)",
@@ -960,6 +1910,41 @@ class AsteroidMathGame:
 
         self.canvas.bind("<Configure>", self._schedule_start_screen_layout)
         self._layout_start_screen()
+
+    def show_start_screen(self):
+        self._cancel_splash_animation()
+        self.game_active = False
+        self.is_t20_mode = False
+
+        if callable(run_qt_portal):
+            try:
+                self.root.withdraw()
+                selected_action = run_qt_portal()
+            except Exception:
+                selected_action = "__fallback__"
+            finally:
+                if self.root.winfo_exists():
+                    self.root.deiconify()
+                    try:
+                        self.root.lift()
+                        self.root.focus_force()
+                    except tk.TclError:
+                        pass
+
+            if selected_action == "admin":
+                self.admin_login()
+                return
+            if selected_action == "student":
+                self.student_login()
+                return
+            if selected_action == "guest":
+                self.start_t20_flow()
+                return
+            if selected_action is None:
+                self.root.destroy()
+                return
+
+        self._show_legacy_start_screen()
 
     # ------- Admin Login Flow --------
 
@@ -6220,7 +7205,10 @@ MAX_BATCH_LENGTH = 30
 if __name__ == "__main__":
     init_db()
     ensure_default_admin()
+    if callable(run_qt_splash):
+        run_qt_splash()
     root = tk.Tk()
+    root.withdraw()
     game = AsteroidMathGame(root)
     root.mainloop()
    

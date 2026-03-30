@@ -1,6 +1,7 @@
 cffi==2.0.0
 cryptography==46.0.5
 pillow==12.1.1
+PySide6
 pycparser==3.0
 opencv-python==4.13.0.92
 psycopg2-binary==2.9.10
