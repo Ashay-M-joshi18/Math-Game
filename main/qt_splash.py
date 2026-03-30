@@ -292,7 +292,7 @@ class RocketSplashScreen(QWidget):
 
             subtitle_font = QFont("Segoe UI", max(12, int(title_size * 0.24)), QFont.Weight.Bold)
             painter.setFont(subtitle_font)
-            painter.setPen(QColor("#FFF8DD"))
+            painter.setPen(QColor("#2E2C37"))
             painter.drawText(QRectF(0, moon_y + (moon_r * 0.82), self.width(), 40), Qt.AlignmentFlag.AlignHCenter, "Ready for launch")
 
         footer_font = QFont("Segoe UI", 11, QFont.Weight.DemiBold)

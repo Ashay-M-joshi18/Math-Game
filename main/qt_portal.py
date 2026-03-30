@@ -2,14 +2,16 @@ import random
 import sys
 import time
 
-from PySide6.QtCore import Qt, QRectF
-from PySide6.QtGui import QColor, QFont, QPainter, QPen
+from PySide6.QtCore import QRectF, Qt
+from PySide6.QtGui import QColor, QFont, QPainter
 from PySide6.QtWidgets import (
     QApplication,
+    QBoxLayout,
     QFrame,
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QScrollArea,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
@@ -20,7 +22,8 @@ class PortalCard(QFrame):
     def __init__(self, badge, title, description, button_text, accent, on_click):
         super().__init__()
         self.setObjectName("portalCard")
-        self.setMinimumHeight(150)
+        self.setMinimumHeight(138)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(22, 18, 22, 18)
@@ -69,7 +72,8 @@ class PortalCard(QFrame):
         button.clicked.connect(on_click)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
         button.setFixedHeight(44)
-        button.setMinimumWidth(220)
+        button.setMinimumWidth(0)
+        button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         button.setStyleSheet(
             """
             QPushButton {
@@ -85,7 +89,7 @@ class PortalCard(QFrame):
             QPushButton:pressed { background: #D96F12; }
             """
         )
-        layout.addWidget(button, 0, Qt.AlignmentFlag.AlignLeft)
+        layout.addWidget(button)
 
 
 class PortalWindow(QWidget):
@@ -97,11 +101,15 @@ class PortalWindow(QWidget):
 
         self.setWindowTitle("Math Game")
         self.resize(1260, 760)
-        self.setMinimumSize(1080, 700)
+        self.setMinimumSize(760, 560)
         self.setStyleSheet(
             """
             QWidget#root {
                 background: transparent;
+            }
+            QScrollArea {
+                background: transparent;
+                border: none;
             }
             QFrame#shell {
                 background: #1A5A89;
@@ -162,31 +170,45 @@ class PortalWindow(QWidget):
         self._build_ui()
 
     def _build_ui(self):
-        root_layout = QVBoxLayout(self)
-        root_layout.setContentsMargins(72, 52, 72, 30)
-        root_layout.setSpacing(20)
+        outer_layout = QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
 
-        root_layout.addStretch(1)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        outer_layout.addWidget(scroll)
 
-        shell = QFrame()
-        shell.setObjectName("shell")
-        shell.setMaximumWidth(1120)
-        shell_layout = QVBoxLayout(shell)
-        shell_layout.setContentsMargins(28, 18, 28, 18)
-        shell_layout.setSpacing(18)
+        scroll_content = QWidget()
+        scroll.setWidget(scroll_content)
+
+        self.root_layout = QVBoxLayout(scroll_content)
+        self.root_layout.setContentsMargins(72, 52, 72, 30)
+        self.root_layout.setSpacing(20)
+
+        self.shell = QFrame()
+        self.shell.setObjectName("shell")
+        self.shell.setMaximumWidth(1120)
+        self.shell.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        self.shell_layout = QVBoxLayout(self.shell)
+        self.shell_layout.setContentsMargins(28, 18, 28, 18)
+        self.shell_layout.setSpacing(18)
 
         top_line = QFrame()
         top_line.setFixedHeight(5)
         top_line.setStyleSheet("background: #46D8FF; border-radius: 2px;")
-        shell_layout.addWidget(top_line)
+        self.shell_layout.addWidget(top_line)
 
         inner = QFrame()
         inner.setObjectName("inner")
-        inner_layout = QHBoxLayout(inner)
-        inner_layout.setContentsMargins(38, 34, 38, 34)
-        inner_layout.setSpacing(42)
+        self.inner_layout = QBoxLayout(QBoxLayout.Direction.LeftToRight)
+        self.inner_layout.setContentsMargins(38, 34, 38, 34)
+        self.inner_layout.setSpacing(42)
+        inner.setLayout(self.inner_layout)
 
-        hero_col = QVBoxLayout()
+        self.hero_widget = QWidget()
+        self.hero_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        hero_col = QVBoxLayout(self.hero_widget)
         hero_col.setSpacing(12)
 
         eyebrow = QLabel("SPACE MISSION HQ")
@@ -194,24 +216,21 @@ class PortalWindow(QWidget):
         eyebrow.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
         hero_col.addWidget(eyebrow, 0, Qt.AlignmentFlag.AlignLeft)
 
-        title = QLabel("Math Game")
-        title.setObjectName("heroTitle")
-        title.setMaximumWidth(400)
-        hero_col.addWidget(title, 0, Qt.AlignmentFlag.AlignLeft)
+        self.title_label = QLabel("Math Game")
+        self.title_label.setObjectName("heroTitle")
+        hero_col.addWidget(self.title_label, 0, Qt.AlignmentFlag.AlignLeft)
 
-        sub = QLabel("Playful number missions for young space explorers")
-        sub.setObjectName("heroSub")
-        sub.setWordWrap(True)
-        sub.setMaximumWidth(420)
-        hero_col.addWidget(sub)
+        self.sub_label = QLabel("Playful number missions for young space explorers")
+        self.sub_label.setObjectName("heroSub")
+        self.sub_label.setWordWrap(True)
+        hero_col.addWidget(self.sub_label)
 
-        body = QLabel(
+        self.body_label = QLabel(
             "Jump into bright space portals, practise arithmetic with meteor rounds, and build confidence through quick wins and progress tracking."
         )
-        body.setObjectName("heroBody")
-        body.setWordWrap(True)
-        body.setMaximumWidth(420)
-        hero_col.addWidget(body)
+        self.body_label.setObjectName("heroBody")
+        self.body_label.setWordWrap(True)
+        hero_col.addWidget(self.body_label)
 
         chip_row_1 = QHBoxLayout()
         chip_row_1.setSpacing(12)
@@ -237,27 +256,27 @@ class PortalWindow(QWidget):
         chip_row_2.addStretch(1)
         hero_col.addLayout(chip_row_2)
 
-        note = QLabel(
+        self.note_label = QLabel(
             "Choose a portal to launch the same game systems with a brighter, more kid-friendly mission control look."
         )
-        note.setObjectName("heroNote")
-        note.setWordWrap(True)
-        note.setMaximumWidth(420)
-        hero_col.addWidget(note)
+        self.note_label.setObjectName("heroNote")
+        self.note_label.setWordWrap(True)
+        hero_col.addWidget(self.note_label)
         hero_col.addStretch(1)
 
-        right_col = QVBoxLayout()
+        self.right_widget = QWidget()
+        self.right_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
+        right_col = QVBoxLayout(self.right_widget)
         right_col.setSpacing(14)
 
-        portal_title = QLabel("Choose your portal")
-        portal_title.setObjectName("portalTitle")
-        right_col.addWidget(portal_title)
+        self.portal_title = QLabel("Choose your portal")
+        self.portal_title.setObjectName("portalTitle")
+        right_col.addWidget(self.portal_title)
 
-        portal_desc = QLabel("Each route keeps the same game logic. Only the mission entry point changes.")
-        portal_desc.setObjectName("portalDesc")
-        portal_desc.setWordWrap(True)
-        portal_desc.setMaximumWidth(380)
-        right_col.addWidget(portal_desc)
+        self.portal_desc = QLabel("Each route keeps the same game logic. Only the mission entry point changes.")
+        self.portal_desc.setObjectName("portalDesc")
+        self.portal_desc.setWordWrap(True)
+        right_col.addWidget(self.portal_desc)
 
         cards_wrap = QVBoxLayout()
         cards_wrap.setSpacing(14)
@@ -294,23 +313,75 @@ class PortalWindow(QWidget):
         right_col.addLayout(cards_wrap)
         right_col.addStretch(1)
 
-        inner_layout.addLayout(hero_col, 11)
-        inner_layout.addLayout(right_col, 10)
-        shell_layout.addWidget(inner)
+        self.inner_layout.addWidget(self.hero_widget, 11)
+        self.inner_layout.addWidget(self.right_widget, 10)
+        self.shell_layout.addWidget(inner)
 
-        root_layout.addWidget(shell, 0, Qt.AlignmentFlag.AlignHCenter)
+        self.root_layout.addWidget(self.shell, 0, Qt.AlignmentFlag.AlignHCenter)
 
-        footer = QLabel("Built for playful practice, classroom demos, and progress-driven space adventures.")
-        footer.setObjectName("footer")
-        footer.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        root_layout.addWidget(footer)
+        self.footer = QLabel("Built for playful practice, classroom demos, and progress-driven space adventures.")
+        self.footer.setObjectName("footer")
+        self.footer.setWordWrap(True)
+        self.footer.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self.root_layout.addWidget(self.footer)
 
-        footer_small = QLabel("© 2026 SynCraft Solution")
-        footer_small.setObjectName("footerSmall")
-        footer_small.setAlignment(Qt.AlignmentFlag.AlignHCenter)
-        root_layout.addWidget(footer_small)
+        self.footer_small = QLabel("(c) 2026 SynCraft Solution")
+        self.footer_small.setObjectName("footerSmall")
+        self.footer_small.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        self.root_layout.addWidget(self.footer_small)
 
-        root_layout.addStretch(1)
+        self.root_layout.addStretch(1)
+        self._apply_responsive_layout()
+
+    def _apply_responsive_layout(self):
+        width = self.width()
+        compact = width < 980
+        tight = width < 840
+
+        self.root_layout.setContentsMargins(
+            24 if compact else 72,
+            24 if compact else 52,
+            24 if compact else 72,
+            22 if compact else 30,
+        )
+        self.shell_layout.setContentsMargins(
+            18 if compact else 28,
+            14 if compact else 18,
+            18 if compact else 28,
+            14 if compact else 18,
+        )
+        self.inner_layout.setContentsMargins(
+            24 if compact else 38,
+            24 if compact else 34,
+            24 if compact else 38,
+            24 if compact else 34,
+        )
+        self.inner_layout.setSpacing(24 if compact else 42)
+        self.inner_layout.setDirection(
+            QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight
+        )
+
+        self.title_label.setFont(
+            QFont("Impact", 32 if tight else 40 if compact else 52, QFont.Weight.Black)
+        )
+        self.sub_label.setFont(
+            QFont("Segoe UI", 18 if tight else 20 if compact else 24, QFont.Weight.Bold)
+        )
+        self.portal_title.setFont(
+            QFont("Segoe UI", 18 if tight else 20 if compact else 22, QFont.Weight.Bold)
+        )
+
+        self.body_label.setMaximumWidth(16777215 if compact else 420)
+        self.note_label.setMaximumWidth(16777215 if compact else 420)
+        self.portal_desc.setMaximumWidth(16777215 if compact else 380)
+
+        footer_alignment = Qt.AlignmentFlag.AlignLeft if tight else Qt.AlignmentFlag.AlignHCenter
+        self.footer.setAlignment(footer_alignment)
+        self.footer_small.setAlignment(footer_alignment)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_responsive_layout()
 
     def _choose(self, action):
         self.selected_action = action
@@ -348,7 +419,9 @@ class PortalWindow(QWidget):
 
         for star in self._stars:
             painter.setBrush(QColor("#FFFFFF"))
-            painter.drawEllipse(QRectF(star["x"] - star["r"], star["y"] - star["r"], star["r"] * 2, star["r"] * 2))
+            painter.drawEllipse(
+                QRectF(star["x"] - star["r"], star["y"] - star["r"], star["r"] * 2, star["r"] * 2)
+            )
 
 
 def run_qt_portal():

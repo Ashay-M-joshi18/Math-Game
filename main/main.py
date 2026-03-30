@@ -24,6 +24,34 @@ try:
     from qt_portal import run_qt_portal
 except Exception:
     run_qt_portal = None
+try:
+    from PySide6.QtCore import QRectF, Qt
+    from PySide6.QtGui import QColor, QPainter
+    from PySide6.QtWidgets import (
+        QApplication,
+        QFrame,
+        QHBoxLayout,
+        QLabel,
+        QLineEdit,
+        QPushButton,
+        QSizePolicy,
+        QVBoxLayout,
+        QWidget,
+    )
+except Exception:
+    QApplication = None
+    QRectF = None
+    Qt = None
+    QColor = None
+    QPainter = None
+    QFrame = None
+    QHBoxLayout = None
+    QLabel = None
+    QLineEdit = None
+    QPushButton = None
+    QSizePolicy = None
+    QVBoxLayout = None
+    QWidget = None
 from models import (
     create_student_user,
     login_user,
@@ -1806,7 +1834,7 @@ class AsteroidMathGame:
                 moon_y + (moon_r * 0.82),
                 text="Ready for launch",
                 font=(FONT_FAMILY_UI, subtitle_size, "bold"),
-                fill="#FFF8DD",
+                fill="#2E2C37",
             )
 
         self.canvas.create_text(
@@ -1840,7 +1868,7 @@ class AsteroidMathGame:
         if ret:
             cv2image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             img = Image.fromarray(cv2image)
-            
+                  
             canvas_width = max(self.canvas.winfo_width(), 1)
             canvas_height = max(self.canvas.winfo_height(), 1)
 
@@ -1948,10 +1976,44 @@ class AsteroidMathGame:
 
     # ------- Admin Login Flow --------
 
+    def _open_qt_login(self, heading_text, required_role, success_handler, on_back):
+        if not callable(run_qt_login):
+            return False
+
+        try:
+            if self.root.winfo_exists():
+                self.root.withdraw()
+            result = run_qt_login(heading_text=heading_text, required_role=required_role)
+        except Exception:
+            return False
+        finally:
+            if self.root.winfo_exists():
+                self.root.deiconify()
+                try:
+                    self.root.lift()
+                    self.root.focus_force()
+                except tk.TclError:
+                    pass
+
+        if result and result.get("action") == "success" and result.get("user"):
+            success_handler(result["user"])
+            return True
+
+        on_back()
+        return True
+
     def admin_login(self) -> None:
-        """Switches to the formal LoginScreen UI specifically for Admin access"""
-        self.canvas.destroy()
-        # Call the class you already have to render that dark-themed card
+        """Open the admin login flow, preferring the Qt experience when available."""
+        if self._open_qt_login(
+            heading_text="Admin Login",
+            required_role="admin",
+            success_handler=self.handle_admin_auth_success,
+            on_back=self.show_start_screen,
+        ):
+            return
+
+        if hasattr(self, "canvas") and self.canvas.winfo_exists():
+            self.canvas.destroy()
         LoginScreen(
             self.root,
             on_login_success=self.handle_admin_auth_success,
@@ -1975,6 +2037,14 @@ class AsteroidMathGame:
     
 
     def show_login_screen(self):
+        if self._open_qt_login(
+            heading_text="Admin Login",
+            required_role="admin",
+            success_handler=self.handle_admin_auth_success,
+            on_back=self.show_start_screen,
+        ):
+            return
+
         clear_root(self.root)
         LoginScreen(
         self.root,
@@ -1984,6 +2054,14 @@ class AsteroidMathGame:
         )
 
     def student_login(self):
+        if self._open_qt_login(
+            heading_text="Student Login",
+            required_role="student",
+            success_handler=self.handle_student_auth_success,
+            on_back=self.show_start_screen,
+        ):
+            return
+
         clear_root(self.root)
         LoginScreen(
             self.root,
@@ -6919,6 +6997,9 @@ class LoginScreen(tk.Frame):
         self.on_login_success = on_login_success
         self.on_back = on_back
         self.heading_text = heading_text
+        self.field_default_border = "#21374F"
+        self.field_active_border = "#4EC9FF"
+        self.field_shells = {}
 
         # Root frame should fill window but we'll center an inner column
         self.pack(fill="both", expand=True)
@@ -6963,18 +7044,18 @@ class LoginScreen(tk.Frame):
         # as the main menu column but still keeps side margins.
         self.update_idletasks()
         available_w = max(480, self.winfo_width() or 0)
-        card_width = max(560, min(available_w - 180, 820))
+        card_width = max(620, min(available_w - 160, 840))
 
         # Login card: wider & taller, centered within the column
         login_card = tk.Frame(
             center_column,
             bg=APP_SURFACE_COLOR,
-            padx=34,
-            pady=30,
+            padx=24,
+            pady=24,
             highlightthickness=1,
             highlightbackground="#27425E",
             width=card_width,
-            height=420,
+            height=380,
         )
         login_card.pack(padx=32, pady=(0, 64))
         # Respect the explicit width/height instead of shrinking to children
@@ -6983,7 +7064,49 @@ class LoginScreen(tk.Frame):
         top_strip = tk.Frame(login_card, bg="#FF8A2B", height=6)
         top_strip.pack(fill="x", pady=(0, 18))
 
-        status_row = tk.Frame(login_card, bg=APP_SURFACE_COLOR)
+        card_body = tk.Frame(login_card, bg=APP_SURFACE_COLOR)
+        card_body.pack(fill="both", expand=True)
+
+        hero_panel = tk.Frame(
+            card_body,
+            bg="#11243A",
+            width=280,
+            padx=24,
+            pady=24,
+            highlightthickness=1,
+            highlightbackground="#23415E",
+        )
+        hero_panel.pack(side="left", fill="y", padx=(0, 22))
+        hero_panel.pack_propagate(False)
+
+        tk.Label(
+            hero_panel,
+            text="MISSION CONTROL",
+            font=(FONT_FAMILY_UI, 9, "bold"),
+            fg="#74CFFF",
+            bg="#11243A",
+        ).pack(anchor="w")
+        tk.Label(
+            hero_panel,
+            text=self.heading_text,
+            font=(FONT_FAMILY_DISPLAY, 24, "bold"),
+            fg=APP_TITLE_COLOR,
+            bg="#11243A",
+        ).pack(anchor="w", pady=(10, 6))
+        tk.Label(
+            hero_panel,
+            text="Sign in to continue.",
+            font=(FONT_FAMILY_TEXT, 10),
+            fg="#A8C2DE",
+            bg="#11243A",
+            justify="left",
+            wraplength=220,
+        ).pack(anchor="w", pady=(0, 8))
+
+        form_panel = tk.Frame(card_body, bg=APP_SURFACE_COLOR)
+        form_panel.pack(side="left", fill="both", expand=True)
+
+        status_row = tk.Frame(form_panel, bg=APP_SURFACE_COLOR)
         status_row.pack(fill="x", pady=(0, 10))
         tk.Label(
             status_row,
@@ -7003,94 +7126,37 @@ class LoginScreen(tk.Frame):
         ).pack(side="right")
 
         tk.Label(
-            login_card,
+            form_panel,
             text="Welcome Back",
             font=(FONT_FAMILY_TEXT, 22, "bold"),
             fg=APP_TEXT_COLOR,
             bg=APP_SURFACE_COLOR
         ).pack(anchor="w")
         tk.Label(
-            login_card,
-            text="Sign in to continue your challenge in the space-console arena.",
+            form_panel,
+            text="Enter your credentials.",
             font=(FONT_FAMILY_TEXT, 10),
             fg="#A5BCD7",
             bg=APP_SURFACE_COLOR
-        ).pack(anchor="w", pady=(3, 20))
+        ).pack(anchor="w", pady=(3, 18))
 
-        tk.Label(
-            login_card,
-            text="Login ID",
-            font=(FONT_FAMILY_TEXT, 10, "bold"),
-            fg=APP_TEXT_COLOR,
-            bg=APP_SURFACE_COLOR
-        ).pack(anchor="w")
-        self.login_id = tk.Entry(
-            login_card,
-            font=(FONT_FAMILY_TEXT, 11),
-            bg="#091726",
-            fg=APP_TEXT_COLOR,
-            insertbackground=APP_TEXT_COLOR,
-            relief="flat",
-            bd=0,
-            highlightthickness=1,
-            highlightbackground="#21374F",
-            highlightcolor="#74CFFF",
+        self._build_field_group(
+            form_panel,
+            label_text="Login ID",
+            prefix_text="ID",
+            field_attr="login_id",
+            hint_text="",
         )
-        self.login_id.pack(fill="x", pady=(6, 14), ipady=8)
-
-        tk.Label(
-            login_card,
-            text="Password",
-            font=(FONT_FAMILY_TEXT, 10, "bold"),
-            fg=APP_TEXT_COLOR,
-            bg=APP_SURFACE_COLOR
-        ).pack(anchor="w")
-
-        self.password_visible = False
-        self.password_show_label = "\U0001F441 Show"
-        self.password_hide_label = "\U0001F441 Hide"
-        password_row = tk.Frame(
-            login_card,
-            bg="#091726",
-            highlightthickness=1,
-            highlightbackground="#21374F"
+        self._build_field_group(
+            form_panel,
+            label_text="Password",
+            prefix_text="KEY",
+            field_attr="password",
+            hint_text="",
+            is_password=True,
         )
-        password_row.pack(fill="x", pady=(6, 18))
 
-        self.password = tk.Entry(
-            password_row,
-            font=(FONT_FAMILY_TEXT, 11),
-            show="*",
-            bg="#091726",
-            fg=APP_TEXT_COLOR,
-            insertbackground=APP_TEXT_COLOR,
-            relief="flat",
-            bd=0,
-            highlightthickness=0
-        )
-        self.password.pack(side="left", fill="x", expand=True, padx=(12, 8), pady=8, ipady=6)
-
-        self.password_toggle_btn = tk.Button(
-            password_row,
-            text=self.password_show_label,
-            command=self._toggle_password_visibility,
-            font=("Segoe UI Emoji", 9, "bold"),
-            bg="#173149",
-            fg="#C9D7FF",
-            activebackground="#23415E",
-            activeforeground=APP_TEXT_COLOR,
-            relief="flat",
-            bd=0,
-            width=8,
-            takefocus=False,
-            cursor="hand2"
-        )
-        self.password_toggle_btn.pack(side="right", padx=(0, 8), pady=8, ipady=6)
-        self.password_toggle_btn.bind("<Enter>", lambda _: self.password_toggle_btn.config(bg="#23415E"))
-        self.password_toggle_btn.bind("<Leave>", lambda _: self.password_toggle_btn.config(bg="#173149"))
-        self._set_password_visibility(False)
-
-        button_base = tk.Frame(login_card, bg=APP_SURFACE_COLOR)
+        button_base = tk.Frame(form_panel, bg=APP_SURFACE_COLOR)
         button_base.pack(fill="x")
 
         sign_in_btn = tk.Button(
@@ -7122,6 +7188,104 @@ class LoginScreen(tk.Frame):
         self.login_id.bind("<Return>", lambda _: self.password.focus_set())
         self.password.bind("<Return>", lambda _: self._submit())
         self.login_id.focus_set()
+        self._set_field_highlight(self.login_id, True)
+
+    def _build_field_group(self, parent, label_text, prefix_text, field_attr, hint_text, is_password=False):
+        tk.Label(
+            parent,
+            text=label_text,
+            font=(FONT_FAMILY_TEXT, 10, "bold"),
+            fg=APP_TEXT_COLOR,
+            bg=APP_SURFACE_COLOR
+        ).pack(anchor="w")
+
+        field_shell = tk.Frame(
+            parent,
+            bg="#091726",
+            highlightthickness=1,
+            highlightbackground=self.field_default_border,
+        )
+        field_shell.pack(fill="x", pady=(6, 6))
+
+        tk.Label(
+            field_shell,
+            text=prefix_text,
+            font=(FONT_FAMILY_UI, 9, "bold"),
+            fg="#74CFFF",
+            bg="#091726",
+            padx=14,
+            pady=12,
+        ).pack(side="left")
+
+        entry = tk.Entry(
+            field_shell,
+            font=(FONT_FAMILY_TEXT, 11),
+            bg="#091726",
+            fg=APP_TEXT_COLOR,
+            insertbackground=APP_TEXT_COLOR,
+            relief="flat",
+            bd=0,
+            highlightthickness=0,
+            show="*" if is_password else "",
+        )
+        if is_password:
+            entry.pack(side="left", fill="x", expand=True, padx=(4, 8), pady=8, ipady=6)
+        else:
+            entry.pack(side="left", fill="x", expand=True, padx=(4, 12), pady=8, ipady=6)
+
+        if is_password:
+            self.password_visible = False
+            self.password_show_label = "SHOW"
+            self.password_hide_label = "HIDE"
+            self.password_toggle_btn = tk.Button(
+                field_shell,
+                text=self.password_show_label,
+                command=self._toggle_password_visibility,
+                font=(FONT_FAMILY_UI, 8, "bold"),
+                bg="#173149",
+                fg="#C9D7FF",
+                activebackground="#23415E",
+                activeforeground=APP_TEXT_COLOR,
+                relief="flat",
+                bd=0,
+                width=7,
+                takefocus=False,
+                cursor="hand2"
+            )
+            self.password_toggle_btn.pack(side="right", padx=(0, 8), pady=8, ipady=6)
+            self.password_toggle_btn.bind("<Enter>", lambda _: self.password_toggle_btn.config(bg="#23415E"))
+            self.password_toggle_btn.bind("<Leave>", lambda _: self.password_toggle_btn.config(bg="#173149"))
+            self._set_password_visibility(False)
+
+        if hint_text:
+            tk.Label(
+                parent,
+                text=hint_text,
+                font=(FONT_FAMILY_TEXT, 9),
+                fg="#7F9CBC",
+                bg=APP_SURFACE_COLOR,
+                justify="left",
+            ).pack(anchor="w", pady=(0, 14))
+        else:
+            tk.Frame(parent, bg=APP_SURFACE_COLOR, height=8).pack(anchor="w")
+
+        setattr(self, field_attr, entry)
+        self.field_shells[entry] = field_shell
+        entry.bind("<FocusIn>", self._handle_field_focus, add="+")
+        entry.bind("<FocusOut>", self._handle_field_blur, add="+")
+
+    def _set_field_highlight(self, widget, is_active):
+        field_shell = self.field_shells.get(widget)
+        if field_shell and field_shell.winfo_exists():
+            field_shell.config(
+                highlightbackground=self.field_active_border if is_active else self.field_default_border
+            )
+
+    def _handle_field_focus(self, event):
+        self._set_field_highlight(event.widget, True)
+
+    def _handle_field_blur(self, event):
+        self._set_field_highlight(event.widget, False)
 
 # password visibility toggle helper
     def _set_password_visibility(self, is_visible: bool):
@@ -7192,6 +7356,509 @@ class LoginScreen(tk.Frame):
             messagebox.showerror("Error", "Invalid credentials")
             return
         self.on_login_success(user)
+
+
+QT_LOGIN_COPY = {
+    "admin": {
+        "eyebrow": "ADMIN AUTH",
+        "subtitle": "Secure access for administrators.",
+        "body": "Sign in to continue.",
+    },
+    "student": {
+        "eyebrow": "STUDENT AUTH",
+        "subtitle": "Secure access for students.",
+        "body": "Sign in to continue.",
+    },
+}
+
+
+if QApplication is not None:
+    class QtLoginWindow(QWidget):
+        def __init__(self, heading_text="Login", required_role=None):
+            super().__init__()
+            self.heading_text = heading_text
+            self.required_role = required_role
+            self.selected_user = None
+            self.result_action = "back"
+            self.password_visible = False
+            self._stars = []
+            self._starfield_size = None
+
+            self.setWindowTitle(f"{heading_text} - Math Game")
+            self.resize(1040, 640)
+            self.setMinimumSize(900, 580)
+            self.setObjectName("root")
+            self.setStyleSheet(
+                """
+                QWidget#root {
+                    background: transparent;
+                }
+                QFrame#shell {
+                    background: #184B74;
+                    border: 2px solid #3CD1FF;
+                    border-radius: 28px;
+                }
+                QFrame#inner {
+                    background: rgba(10, 31, 53, 0.94);
+                    border: 1px solid #265985;
+                    border-radius: 22px;
+                }
+                QFrame#heroPanel {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #133150, stop:0.55 #10263F, stop:1 #0C1B2D);
+                    border: 1px solid #285D88;
+                    border-radius: 20px;
+                }
+                QLabel#eyebrow {
+                    color: #CFF4FF;
+                    background: #19456C;
+                    border: 1px solid #59DAFF;
+                    border-radius: 13px;
+                    font: 700 12px 'Segoe UI';
+                    padding: 7px 14px;
+                }
+                QLabel#heroTitle {
+                    color: #F6FBFF;
+                    font: 900 40px Impact;
+                }
+                QLabel#heroSub {
+                    color: #76CFFF;
+                    font: 700 18px 'Segoe UI';
+                }
+                QLabel#heroBody, QLabel#formBody, QLabel#hintText {
+                    color: #CFE2F7;
+                    font: 400 13px 'Segoe UI';
+                }
+                QLabel#statusText {
+                    color: #7CD5FF;
+                    font: 700 11px 'Segoe UI';
+                }
+                QLabel#statusPill {
+                    color: #091726;
+                    background: #7EE081;
+                    border-radius: 11px;
+                    font: 700 11px 'Segoe UI';
+                    padding: 4px 12px;
+                }
+                QLabel#formTitle {
+                    color: #F7FBFF;
+                    font: 700 28px 'Segoe UI';
+                }
+                QLabel#formLabel {
+                    color: #F7FBFF;
+                    font: 700 11px 'Segoe UI';
+                }
+                QFrame#fieldWrap {
+                    background: #091726;
+                    border: 1px solid #264967;
+                    border-radius: 16px;
+                }
+                QLabel#fieldPrefix {
+                    color: #7AD2FF;
+                    font: 700 10px 'Segoe UI';
+                    padding-left: 14px;
+                    padding-right: 8px;
+                }
+                QLineEdit {
+                    background: transparent;
+                    color: #F4F8FF;
+                    border: none;
+                    font: 400 14px 'Segoe UI';
+                    padding: 14px 8px 14px 0;
+                }
+                QLineEdit:focus {
+                    color: #FFFFFF;
+                }
+                QPushButton#toggleButton {
+                    background: #173149;
+                    color: #D7E8FF;
+                    border: none;
+                    border-radius: 12px;
+                    font: 700 10px 'Segoe UI';
+                    padding: 10px 14px;
+                }
+                QPushButton#toggleButton:hover {
+                    background: #23415E;
+                }
+                QPushButton#toggleButton:pressed {
+                    background: #11263A;
+                }
+                QPushButton#primaryButton {
+                    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                        stop:0 #FFB34F, stop:0.48 #FF9727, stop:1 #D66B0F);
+                    color: #091726;
+                    border: 1px solid #FFD08A;
+                    border-radius: 22px;
+                    font: 700 14px 'Segoe UI';
+                    padding: 13px 18px;
+                }
+                QPushButton#primaryButton:hover {
+                    background: #FFAA36;
+                }
+                QPushButton#primaryButton:pressed {
+                    background: #D96F12;
+                }
+                QPushButton#secondaryButton {
+                    background: #11253B;
+                    color: #DCEBFF;
+                    border: 1px solid #315B7F;
+                    border-radius: 20px;
+                    font: 700 13px 'Segoe UI';
+                    padding: 11px 18px;
+                }
+                QPushButton#secondaryButton:hover {
+                    background: #18314C;
+                }
+                QPushButton#secondaryButton:pressed {
+                    background: #0C1D2F;
+                }
+                QLabel#inlineStatus {
+                    border-radius: 12px;
+                    font: 600 11px 'Segoe UI';
+                    padding: 9px 12px;
+                }
+                """
+            )
+            self._build_ui()
+
+        def _build_ui(self):
+            copy = QT_LOGIN_COPY.get(self.required_role, QT_LOGIN_COPY["student"])
+
+            root_layout = QVBoxLayout(self)
+            root_layout.setContentsMargins(70, 46, 70, 32)
+            root_layout.setSpacing(20)
+            root_layout.addStretch(1)
+
+            shell = QFrame()
+            shell.setObjectName("shell")
+            shell.setMaximumWidth(1120)
+            shell_layout = QVBoxLayout(shell)
+            shell_layout.setContentsMargins(28, 18, 28, 18)
+            shell_layout.setSpacing(18)
+
+            top_line = QFrame()
+            top_line.setFixedHeight(5)
+            top_line.setStyleSheet("background: #46D8FF; border-radius: 2px;")
+            shell_layout.addWidget(top_line)
+
+            inner = QFrame()
+            inner.setObjectName("inner")
+            inner_layout = QHBoxLayout(inner)
+            inner_layout.setContentsMargins(34, 32, 34, 32)
+            inner_layout.setSpacing(34)
+
+            hero_panel = QFrame()
+            hero_panel.setObjectName("heroPanel")
+            hero_panel.setMinimumWidth(280)
+            hero_layout = QVBoxLayout(hero_panel)
+            hero_layout.setContentsMargins(26, 26, 26, 26)
+            hero_layout.setSpacing(12)
+
+            eyebrow = QLabel(copy["eyebrow"])
+            eyebrow.setObjectName("eyebrow")
+            eyebrow.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            hero_layout.addWidget(eyebrow, 0, Qt.AlignmentFlag.AlignLeft)
+
+            title = QLabel(self.heading_text)
+            title.setObjectName("heroTitle")
+            title.setWordWrap(True)
+            hero_layout.addWidget(title)
+
+            subtitle = QLabel(copy["subtitle"])
+            subtitle.setObjectName("heroSub")
+            subtitle.setWordWrap(True)
+            hero_layout.addWidget(subtitle)
+
+            body = QLabel(copy["body"])
+            body.setObjectName("heroBody")
+            body.setWordWrap(True)
+            hero_layout.addWidget(body)
+            hero_layout.addStretch(1)
+
+            form_col = QVBoxLayout()
+            form_col.setSpacing(12)
+
+            status_row = QHBoxLayout()
+            status_row.setSpacing(12)
+
+            status_text = QLabel("AUTH PORTAL")
+            status_text.setObjectName("statusText")
+            status_row.addWidget(status_text, 0, Qt.AlignmentFlag.AlignLeft)
+
+            status_row.addStretch(1)
+
+            status_pill = QLabel("LIVE")
+            status_pill.setObjectName("statusPill")
+            status_row.addWidget(status_pill, 0, Qt.AlignmentFlag.AlignRight)
+            form_col.addLayout(status_row)
+
+            form_title = QLabel("Welcome Back")
+            form_title.setObjectName("formTitle")
+            form_col.addWidget(form_title)
+
+            self.status_label = QLabel("Enter your credentials.")
+            self.status_label.setObjectName("inlineStatus")
+            self._set_status("Enter your credentials.", tone="info")
+            form_col.addWidget(self.status_label)
+
+            self.login_edit = self._build_field(
+                form_col,
+                label_text="Login ID",
+                prefix_text="ID",
+                placeholder="Enter your Login ID",
+                hint_text="",
+                is_password=False,
+            )
+            self.login_edit.setMaxLength(MAX_LOGIN_ID_LENGTH)
+
+            self.password_edit = self._build_field(
+                form_col,
+                label_text="Password",
+                prefix_text="KEY",
+                placeholder="Enter your password",
+                hint_text="",
+                is_password=True,
+            )
+            self.password_edit.setMaxLength(MAX_PASSWORD_LENGTH)
+
+            button_row = QHBoxLayout()
+            button_row.setSpacing(12)
+
+            back_button = QPushButton("Back")
+            back_button.setObjectName("secondaryButton")
+            back_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            back_button.clicked.connect(self._go_back)
+            button_row.addWidget(back_button)
+
+            sign_in_button = QPushButton("Sign In")
+            sign_in_button.setObjectName("primaryButton")
+            sign_in_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            sign_in_button.clicked.connect(self._submit)
+            button_row.addWidget(sign_in_button, 1)
+            form_col.addLayout(button_row)
+            form_col.addStretch(1)
+
+            inner_layout.addWidget(hero_panel, 10)
+            inner_layout.addLayout(form_col, 11)
+            shell_layout.addWidget(inner)
+
+            root_layout.addWidget(shell, 0, Qt.AlignmentFlag.AlignHCenter)
+            root_layout.addStretch(1)
+
+            self.login_edit.returnPressed.connect(self.password_edit.setFocus)
+            self.password_edit.returnPressed.connect(self._submit)
+            self.login_edit.setFocus()
+
+        def _build_field(self, layout, label_text, prefix_text, placeholder, hint_text, is_password=False):
+            label = QLabel(label_text)
+            label.setObjectName("formLabel")
+            layout.addWidget(label)
+
+            field_wrap = QFrame()
+            field_wrap.setObjectName("fieldWrap")
+            field_layout = QHBoxLayout(field_wrap)
+            field_layout.setContentsMargins(0, 0, 0, 0)
+            field_layout.setSpacing(0)
+
+            prefix = QLabel(prefix_text)
+            prefix.setObjectName("fieldPrefix")
+            prefix.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            prefix.setMinimumWidth(54)
+            field_layout.addWidget(prefix)
+
+            entry = QLineEdit()
+            entry.setPlaceholderText(placeholder)
+            entry.setFrame(False)
+            if is_password:
+                entry.setEchoMode(QLineEdit.EchoMode.Password)
+            field_layout.addWidget(entry, 1)
+
+            if is_password:
+                self.password_toggle_btn = QPushButton("SHOW")
+                self.password_toggle_btn.setObjectName("toggleButton")
+                self.password_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+                self.password_toggle_btn.clicked.connect(self._toggle_password_visibility)
+                field_layout.addWidget(self.password_toggle_btn)
+                field_layout.setContentsMargins(0, 0, 8, 0)
+            else:
+                field_layout.setContentsMargins(0, 0, 12, 0)
+
+            layout.addWidget(field_wrap)
+
+            if hint_text:
+                hint = QLabel(hint_text)
+                hint.setObjectName("hintText")
+                hint.setWordWrap(True)
+                layout.addWidget(hint)
+
+            return entry
+
+        def _set_status(self, message, tone="error"):
+            palette = {
+                "error": ("#FFD5D0", "#3A1715", "#8A2F24"),
+                "info": ("#D7EEFF", "#10263E", "#2E5E8B"),
+            }
+            fg, bg, border = palette.get(tone, palette["error"])
+            self.status_label.setText(message)
+            self.status_label.setStyleSheet(
+                f"""
+                QLabel#inlineStatus {{
+                    color: {fg};
+                    background: {bg};
+                    border: 1px solid {border};
+                    border-radius: 12px;
+                    font: 600 11px 'Segoe UI';
+                    padding: 9px 12px;
+                }}
+                """
+            )
+
+        def _toggle_password_visibility(self):
+            self.password_visible = not self.password_visible
+            self.password_edit.setEchoMode(
+                QLineEdit.EchoMode.Normal if self.password_visible else QLineEdit.EchoMode.Password
+            )
+            self.password_toggle_btn.setText("HIDE" if self.password_visible else "SHOW")
+            self.password_edit.setFocus()
+
+        def _go_back(self):
+            self.result_action = "back"
+            self.close()
+
+        def _submit(self):
+            login_id = self.login_edit.text().strip()
+            password = self.password_edit.text()
+
+            if not login_id:
+                self._set_status("Login ID is required.", tone="error")
+                self.login_edit.setFocus()
+                return
+
+            if len(login_id) > MAX_LOGIN_ID_LENGTH:
+                self._set_status(
+                    f"Login ID cannot exceed {MAX_LOGIN_ID_LENGTH} characters.",
+                    tone="error",
+                )
+                self.login_edit.setFocus()
+                return
+
+            if not LOGIN_ID_PATTERN.fullmatch(login_id):
+                self._set_status(
+                    "Login ID can contain only letters, numbers, dot (.), underscore (_) and hyphen (-).",
+                    tone="error",
+                )
+                self.login_edit.setFocus()
+                return
+
+            if not password:
+                self._set_status("Password is required.", tone="error")
+                self.password_edit.setFocus()
+                return
+
+            if len(password) > MAX_PASSWORD_LENGTH:
+                self._set_status(
+                    f"Password cannot exceed {MAX_PASSWORD_LENGTH} characters.",
+                    tone="error",
+                )
+                self.password_edit.setFocus()
+                return
+
+            if self.login_edit.text() != login_id:
+                self.login_edit.setText(login_id)
+
+            user = login_user(login_id, password)
+            if not user:
+                self._set_status("Invalid credentials. Check your Login ID and password.", tone="error")
+                self.password_edit.selectAll()
+                self.password_edit.setFocus()
+                return
+
+            if self.required_role and user.get("role") != self.required_role:
+                role_label = "Administrators" if self.required_role == "admin" else "Students"
+                self._set_status(f"This portal is restricted to {role_label}.", tone="error")
+                self.password_edit.selectAll()
+                self.password_edit.setFocus()
+                return
+
+            self.selected_user = user
+            self.result_action = "success"
+            self.close()
+
+        def closeEvent(self, event):
+            if self.result_action is None:
+                self.result_action = "back"
+            super().closeEvent(event)
+
+        def _ensure_stars(self):
+            size_key = (self.width(), self.height())
+            if self._starfield_size == size_key:
+                return
+            rng = random.Random(11)
+            stars = []
+            star_count = max(44, (self.width() * self.height()) // 19000)
+            for _ in range(star_count):
+                stars.append(
+                    {
+                        "x": rng.randint(18, max(18, self.width() - 18)),
+                        "y": rng.randint(18, max(18, self.height() - 18)),
+                        "r": rng.choice((2, 2, 3)),
+                    }
+                )
+            self._stars = stars
+            self._starfield_size = size_key
+
+        def paintEvent(self, event):
+            self._ensure_stars()
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.fillRect(self.rect(), QColor("#120A25"))
+
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor("#2B1762"))
+            painter.drawEllipse(QRectF(140, 34, 420, 280))
+            painter.setBrush(QColor("#183C80"))
+            painter.drawEllipse(QRectF(self.width() - 380, 90, 300, 220))
+
+            for star in self._stars:
+                painter.setBrush(QColor("#FFFFFF"))
+                painter.drawEllipse(
+                    QRectF(
+                        star["x"] - star["r"],
+                        star["y"] - star["r"],
+                        star["r"] * 2,
+                        star["r"] * 2,
+                    )
+                )
+
+
+    def run_qt_login(heading_text="Login", required_role=None):
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication(sys.argv)
+        app.setQuitOnLastWindowClosed(False)
+
+        login_window = QtLoginWindow(heading_text=heading_text, required_role=required_role)
+        screen = app.primaryScreen()
+        if screen is not None:
+            geometry = screen.availableGeometry()
+            login_window.move(
+                geometry.center().x() - (login_window.width() // 2),
+                geometry.center().y() - (login_window.height() // 2),
+            )
+        login_window.show()
+        login_window.raise_()
+        login_window.activateWindow()
+
+        while login_window.isVisible():
+            app.processEvents()
+            time.sleep(0.016)
+
+        return {
+            "action": login_window.result_action,
+            "user": login_window.selected_user,
+        }
+else:
+    run_qt_login = None
 
 LOGIN_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 STUDENT_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z .'-]*$")
