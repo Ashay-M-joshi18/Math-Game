@@ -6,6 +6,7 @@ import os
 import time
 from PIL.ImageChops import screen
 from dotenv import load_dotenv
+os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 import pygame
 load_dotenv()
 import sys
@@ -41,12 +42,12 @@ try:
 except Exception:
     Workbook = None
 
-APP_TITLE_COLOR = "#E0E0E0"
-APP_BG_COLOR = "#0B0D17"
-APP_ACCENT_COLOR = "#4CAF50"
-APP_SURFACE_COLOR = "#A5B1CF"
-APP_TEXT_COLOR = "#E0E0E0"
-SPLASH_BG_COLOR = "#3D3D7F"
+APP_TITLE_COLOR = "#F6FAFF"
+APP_BG_COLOR = "#07111F"
+APP_ACCENT_COLOR = "#FF8A2B"
+APP_SURFACE_COLOR = "#0E1B2D"
+APP_TEXT_COLOR = "#F4F8FF"
+SPLASH_BG_COLOR = "#07111F"
 
 FONT_FAMILY_DISPLAY = "Impact"
 FONT_FAMILY_UI = "Segoe UI"
@@ -54,40 +55,40 @@ FONT_FAMILY_TEXT = "Segoe UI"
 FONT_FAMILY_MONO = "Consolas"
 
 BACK_BUTTON_FONT = (FONT_FAMILY_UI, 12, "bold")
-BACK_BUTTON_BG = "#253247"
+BACK_BUTTON_BG = "#13253C"
 BACK_BUTTON_FG = "#F4F7FF"
-BACK_BUTTON_ACTIVE_BG = "#334A68"
+BACK_BUTTON_ACTIVE_BG = "#1C3655"
 BACK_BUTTON_ACTIVE_FG = "#FFFFFF"
 
 GLOSSY_BUTTON_THEMES = {
     "green": {
-        "edge": "#9BFF43",
-        "top": "#57E12E",
-        "bottom": "#2CAB16",
-        "text": "#F8FFE8",
+        "edge": "#A7EEFF",
+        "top": "#4BBBE7",
+        "bottom": "#176C9B",
+        "text": "#F4FCFF",
     },
     "lime": {
-        "edge": "#F4FF8A",
-        "top": "#DAFF4F",
-        "bottom": "#AFCF12",
-        "text": "#223100",
+        "edge": "#9AB6D7",
+        "top": "#345472",
+        "bottom": "#16283B",
+        "text": "#F4F8FF",
     },
     "amber": {
-        "edge": "#FFE56A",
-        "top": "#FFD95E",
-        "bottom": "#E1BA06",
-        "text": "#1D1A08",
+        "edge": "#FFD08A",
+        "top": "#FF9A3D",
+        "bottom": "#C75A12",
+        "text": "#FFF7ED",
     },
     "red": {
-        "edge": "#FF877C",
-        "top": "#FF6759",
-        "bottom": "#DF4335",
-        "text": "#FFF6F5",
+        "edge": "#FFB299",
+        "top": "#F96B45",
+        "bottom": "#B63A23",
+        "text": "#FFF5F1",
     },
     "blue": {
-        "edge": "#8AC0FF",
-        "top": "#4E93FF",
-        "bottom": "#1E5FCF",
+        "edge": "#7FD2FF",
+        "top": "#2E7CFF",
+        "bottom": "#1445A6",
         "text": "#F4FAFF",
     },
 }
@@ -280,9 +281,6 @@ def create_back_button(parent, text, command, width=16, font=None):
         highlightthickness=0,
     )
 
-init_db()  # Ensure DB is initialized before any operations
-ensure_default_admin()  # Ensure default admin exists before any operations
-
 #to adjust the path for importing the MathFactory and backend from the backend folder
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(CURRENT_DIR)
@@ -299,7 +297,7 @@ class AsteroidMathGame:
         configure_app_typography(self.root)
         pygame.font.init()
         self.font = pygame.font.SysFont("Arial", 30)
-        self.root.title("Value Your Minds- Math Game")
+        self.root.title("Math Game")
         self.root.geometry("600x800")
         try:
             self.root.state("zoomed")
@@ -321,15 +319,18 @@ class AsteroidMathGame:
         # Sound + effects
         self.is_sound_muted = False
         self.mute_button = None
-        
-        # Load watermark source image
         self.bg_image_raw = None
+        for bg_name in ("Asteroids.jpeg", "asteroids.jpeg", "darkimage.jpeg"):
+            bg_path = os.path.join(PROJECT_ROOT, "assets", bg_name)
+            if os.path.exists(bg_path):
+                try:
+                    self.bg_image_raw = Image.open(bg_path).convert("RGBA")
+                    break
+                except Exception:
+                    continue
+        
         self._bg_cache_size = None
         self._bg_cache_photo = None
-        try:
-            self.bg_image_raw = Image.open(os.path.join(PROJECT_ROOT, "assets", "Logo.jpeg")).convert("RGBA")
-        except Exception:
-            self.bg_image_raw = None
 
         self.canvas = tk.Canvas(root, width=600, height=800, highlightthickness=0, bg=SPLASH_BG_COLOR)
         self.canvas.pack()
@@ -542,17 +543,23 @@ class AsteroidMathGame:
                 pady=0,
                 **base_kwargs,
             )
-            # Keep refs on widget to prevent image GC.
+            # Keep refs and geometry metadata on the widget so it can be resized later
+            # without falling back to Tk's character-based button sizing.
             btn._glossy_images = (normal_img, active_img)
             btn._glossy_is_pressed = False
+            btn._glossy_variant = variant
+            btn._glossy_font = button_font
+            btn._glossy_width_units = width
+            btn._glossy_uses_image = True
+            btn.config(width=width_px, height=height_px)
 
             def _show_normal(_event=None):
-                if btn.winfo_exists():
-                    btn.config(image=normal_img)
+                if btn.winfo_exists() and getattr(btn, "_glossy_images", None):
+                    btn.config(image=btn._glossy_images[0])
 
             def _show_active(_event=None):
-                if btn.winfo_exists():
-                    btn.config(image=active_img)
+                if btn.winfo_exists() and getattr(btn, "_glossy_images", None):
+                    btn.config(image=btn._glossy_images[1])
 
             def _on_press(_event):
                 btn._glossy_is_pressed = True
@@ -581,7 +588,36 @@ class AsteroidMathGame:
             return btn
         except Exception:
             # Safe fallback: still visible even if image rendering fails.
-            return tk.Button(target_parent, width=width, **base_kwargs, **fallback_style)
+            btn = tk.Button(target_parent, width=width, **base_kwargs, **fallback_style)
+            btn._glossy_uses_image = False
+            return btn
+
+    def _resize_glossy_button(self, btn, width=16, font=None):
+        if not btn or not btn.winfo_exists():
+            return
+
+        button_font = font or getattr(btn, "_glossy_font", (FONT_FAMILY_UI, 16, "bold"))
+        if not getattr(btn, "_glossy_uses_image", False):
+            btn.configure(font=button_font, width=width, padx=12, pady=8)
+            return
+
+        text = btn.cget("text")
+        variant = getattr(btn, "_glossy_variant", "green")
+        measure_font = tkfont.Font(root=self.root, font=button_font)
+        char_w = max(7, measure_font.measure("0"))
+        text_w = measure_font.measure(text)
+        width_px = max(int(width * char_w + 18), text_w + 62)
+        height_px = max(50, measure_font.metrics("linespace") + 22)
+        normal_img, active_img = self._get_glossy_button_images(width_px, height_px, variant)
+        btn._glossy_images = (normal_img, active_img)
+        btn._glossy_font = button_font
+        btn._glossy_width_units = width
+        btn.configure(
+            font=button_font,
+            image=active_img if getattr(btn, "_glossy_is_pressed", False) else normal_img,
+            width=width_px,
+            height=height_px,
+        )
 
     def _canvas_offset_x(self):
         if not hasattr(self, "canvas") or not self.canvas.winfo_exists():
@@ -621,30 +657,60 @@ class AsteroidMathGame:
 
         target_size = (max(1, int(width)), max(1, int(height)))
         if self._bg_cache_size != target_size:
-            bg_img = Image.new("RGBA", target_size, "#0B0D17")
+            bg_img = Image.new("RGBA", target_size, "#050B18")
 
-            if self.bg_image_raw:
-                logo = self.bg_image_raw.copy()
-
-                # Strip the dark JPEG backdrop so the mark reads like a watermark.
-                gray = logo.convert("L")
-                alpha = gray.point(
-                    lambda px: 0 if px < 58 else min(255, int((px - 58) * 2.2))
+            if self.bg_image_raw is not None:
+                source = self.bg_image_raw
+                resampling = getattr(Image, "Resampling", Image)
+                scale = max(target_size[0] / source.width, target_size[1] / source.height)
+                resized = source.resize(
+                    (
+                        max(1, int(source.width * scale)),
+                        max(1, int(source.height * scale)),
+                    ),
+                    resampling.LANCZOS,
                 )
-                logo.putalpha(alpha)
 
-                scale = min(target_size[0] / logo.width, target_size[1] / logo.height) * 0.95
-                logo_w = max(1, int(logo.width * scale))
-                logo_h = max(1, int(logo.height * scale))
-                logo = logo.resize((logo_w, logo_h), Image.Resampling.LANCZOS)
+                left = max(0, (resized.width - target_size[0]) // 2)
+                top = max(0, (resized.height - target_size[1]) // 2)
+                bg_img = resized.crop(
+                    (
+                        left,
+                        top,
+                        left + target_size[0],
+                        top + target_size[1],
+                    )
+                ).convert("RGBA")
 
-                # Keep the brand visible but subdued behind the content.
-                logo_alpha = logo.getchannel("A")
-                logo.putalpha(logo_alpha.point(lambda px: int(px * 0.12)))
+            overlay = Image.new("RGBA", target_size, (5, 10, 22, 145))
+            bg_img = Image.alpha_composite(bg_img, overlay)
 
-                x = (target_size[0] - logo_w) // 2
-                y = (target_size[1] - logo_h) // 2
-                bg_img.paste(logo, (x, y), logo)
+            gradient = Image.new("RGBA", target_size, (0, 0, 0, 0))
+            gradient_draw = ImageDraw.Draw(gradient)
+            max_height = max(1, target_size[1] - 1)
+            for y in range(target_size[1]):
+                top_mix = 18 + int(48 * (y / max_height))
+                gradient_draw.line(
+                    (0, y, target_size[0], y),
+                    fill=(4, 12, 28, top_mix),
+                )
+            bg_img = Image.alpha_composite(bg_img, gradient)
+
+            star_draw = ImageDraw.Draw(bg_img)
+            star_count = max(45, (target_size[0] * target_size[1]) // 18000)
+            for _ in range(star_count):
+                x = random.randint(0, target_size[0] - 1)
+                y = random.randint(0, target_size[1] - 1)
+                r = random.randint(1, 2)
+                alpha = random.randint(90, 180)
+                color = random.choice(
+                    (
+                        (198, 227, 255, alpha),
+                        (255, 240, 214, alpha),
+                        (164, 214, 255, alpha),
+                    )
+                )
+                star_draw.ellipse((x - r, y - r, x + r, y + r), fill=color)
 
             self._bg_cache_photo = ImageTk.PhotoImage(bg_img)
             self._bg_cache_size = target_size
@@ -681,55 +747,119 @@ class AsteroidMathGame:
         def _clamp(value, low, high):
             return max(low, min(high, value))
 
-        title_size = int(_clamp(min_side * 0.075, 24, 58))
-        subtitle_size = int(_clamp(min_side * 0.042, 12, 28))
-        button_size = int(_clamp(min_side * 0.045, 12, 24))
+        title_size = int(_clamp(min_side * 0.074, 28, 60))
+        subtitle_size = int(_clamp(min_side * 0.027, 11, 18))
+        button_size = int(_clamp(min_side * 0.038, 12, 22))
         footer_size = int(_clamp(min_side * 0.020, 9, 14))
         footer_small_size = int(_clamp(min_side * 0.017, 8, 12))
-        button_width_chars = int(_clamp(canvas_width / 58, 14, 22))
-        button_pad_y = int(_clamp(canvas_height / 170, 6, 12))
+        button_width_chars = int(_clamp(canvas_width / 60, 16, 24))
 
-        title_y = int(canvas_height * 0.15)
-        title_subtitle_gap = int(_clamp((title_size + subtitle_size) * 1.25, 32, 54))
-        subtitle_y = title_y + title_subtitle_gap
-        button_start_y = int(canvas_height * 0.41)
-        button_gap = int(_clamp(canvas_height * 0.11, 68, 118))
+        button_gap = int(_clamp(canvas_height * 0.10, 62, 104))
         button_spacing = int(_clamp(min_side * 0.04, 20, 32))
         button_step = button_gap + button_spacing
         footer_y = canvas_height - int(_clamp(canvas_height * 0.055, 38, 58))
         footer_small_y = canvas_height - int(_clamp(canvas_height * 0.030, 20, 34))
 
-        max_button_area = footer_y - button_start_y - 90
-        if max_button_area > 0:
-            button_step = min(button_step, max(64, max_button_area // 2))
-
+        button_font = (FONT_FAMILY_UI, button_size, "bold")
         for btn in (admin_btn, student_btn, guest_btn):
-            btn.configure(
-                font=(FONT_FAMILY_UI, button_size, "bold"),
+            self._resize_glossy_button(
+                btn,
                 width=button_width_chars,
-                height=1,
-                padx=10,
-                pady=button_pad_y,
+                font=button_font,
             )
 
         self.canvas.delete("all")
         self.draw_bg(width=canvas_width, height=canvas_height)
 
+        panel_width = int(min(canvas_width * 0.78, 760))
+        panel_height = int(min(canvas_height * 0.60, 520))
+        panel_x1 = int(center_x - (panel_width / 2))
+        panel_y1 = int(max(self._sy(74), canvas_height * 0.12))
+        panel_x2 = int(center_x + (panel_width / 2))
+        panel_y2 = int(min(canvas_height - self._sy(92), panel_y1 + panel_height))
+        self.canvas.create_rectangle(
+            panel_x1,
+            panel_y1,
+            panel_x2,
+            panel_y2,
+            fill="#091726",
+            outline="#1D395A",
+            width=2,
+        )
+        self.canvas.create_rectangle(
+            panel_x1 + 20,
+            panel_y1 + 18,
+            panel_x2 - 20,
+            panel_y1 + 24,
+            fill="#FF8A2B",
+            outline="",
+        )
+
+        eyebrow_y = panel_y1 + int(_clamp(panel_height * 0.13, 36, 58))
+        title_y = eyebrow_y + int(_clamp(title_size * 0.92, 52, 78))
+        subtitle_y = title_y + int(_clamp(subtitle_size * 2.8, 48, 72))
+        self.canvas.create_text(
+            center_x,
+            eyebrow_y,
+            text="SPACE CONSOLE",
+            font=(FONT_FAMILY_UI, max(10, subtitle_size - 1), "bold"),
+            fill="#73C9FF",
+            width=int(panel_width * 0.85),
+        )
+
         self.canvas.create_text(
             center_x,
             title_y,
-            text="Value Your Minds",
+            text="Math Game",
             font=(FONT_FAMILY_DISPLAY, title_size, "bold"),
-            fill="white",
-            width=int(canvas_width * 0.9),
+            fill="#F6FAFF",
+            width=int(panel_width * 0.85),
         )
         self.canvas.create_text(
             center_x,
             subtitle_y,
-            text="Educational Gaming Platform",
-            font=(FONT_FAMILY_UI, subtitle_size),
-            fill="#E0E0E0",
-            width=int(canvas_width * 0.9),
+            text="Fast arithmetic drills, cinematic meteor visuals, live progress tracking, and a dedicated T20 challenge mode.",
+            font=(FONT_FAMILY_TEXT, subtitle_size),
+            fill="#A8BED7",
+            width=int(panel_width * 0.76),
+        )
+
+        chip_y = subtitle_y + int(_clamp(panel_height * 0.14, 58, 82))
+        chip_font = (FONT_FAMILY_UI, max(9, subtitle_size - 1), "bold")
+        chip_specs = [
+            (center_x - (panel_width * 0.22), "Adaptive Levels", "#13273E", "#4A88C7"),
+            (center_x, "Student Analytics", "#171F36", "#FF8A2B"),
+            (center_x + (panel_width * 0.22), "T20 Arena", "#15293A", "#63BCEB"),
+        ]
+        for chip_x, chip_text, chip_fill, chip_outline in chip_specs:
+            self.canvas.create_rectangle(
+                chip_x - 90,
+                chip_y - 18,
+                chip_x + 90,
+                chip_y + 18,
+                fill=chip_fill,
+                outline=chip_outline,
+                width=1,
+            )
+            self.canvas.create_text(
+                chip_x,
+                chip_y,
+                text=chip_text,
+                font=chip_font,
+                fill="#E8F2FF",
+            )
+
+        portal_heading_y = chip_y + int(_clamp(panel_height * 0.12, 58, 84))
+        button_start_y = portal_heading_y + int(_clamp(panel_height * 0.10, 56, 78))
+        max_button_area = max(150, panel_y2 - button_start_y - 46)
+        button_step = min(button_step, max(68, max_button_area // 2))
+
+        self.canvas.create_text(
+            center_x,
+            portal_heading_y,
+            text="Choose your portal",
+            font=(FONT_FAMILY_UI, max(12, subtitle_size + 1), "bold"),
+            fill="#EAF1FB",
         )
 
         self.canvas.create_window(center_x, button_start_y, window=admin_btn)
@@ -739,41 +869,24 @@ class AsteroidMathGame:
         self.canvas.create_text(
             center_x,
             footer_y,
-            text="© 2026 SynCraft Solution",
+            text="Built for focused practice, classroom demos, and progress-driven play.",
             font=(FONT_FAMILY_UI, footer_size),
-            fill="#B0B0B0",
+            fill="#9FB4C9",
             width=int(canvas_width * 0.95),
         )
         self.canvas.create_text(
             center_x,
             footer_small_y,
-            text="Empowering Education Through Technology",
+            text="© 2026 SynCraft Solution",
             font=(FONT_FAMILY_UI, footer_small_size),
-            fill="#909090",
+            fill="#6E89A5",
             width=int(canvas_width * 0.95),
         )
 
     # -------- Start Screen : Admin Login , Student Login , Guest Login , Footer With Credits --------
 
     def show_splash_screen(self):
-        self.clear_screen()
-        self.root.configure(bg=SPLASH_BG_COLOR)
-        self.canvas.configure(bg=SPLASH_BG_COLOR)
-        video_path = os.path.join(PROJECT_ROOT, "assets", "logovideo.mp4")
-        if not os.path.exists(video_path):
-            video_path = os.path.join(PROJECT_ROOT, "assets", "logoanimation.mp4")
-        
-        if not os.path.exists(video_path):
-            self.show_start_screen()
-            return
-
-        self.video_cap = cv2.VideoCapture(video_path)
-        fps = self.video_cap.get(cv2.CAP_PROP_FPS)
-        #delay between frames in milliseconds
-        self.video_delay = 15
-        self.root.update_idletasks()
-
-        self.play_video_frame()
+        self.show_start_screen()
 
     def play_video_frame(self):
         ret, frame = self.video_cap.read()
@@ -819,32 +932,29 @@ class AsteroidMathGame:
         self.canvas.pack(fill="both", expand=True)
 
         self._start_screen_widgets = {
-            "admin_btn": tk.Button(
-                self.root,
+            "admin_btn": self._create_glossy_button(
                 text="Admin Login",
-                width=15,
-                height=2,
-                bg="#4CAF50",
-                fg="white",
-                command=lambda: self._play_button_and_execute(self.admin_login),
+                callback=self.admin_login,
+                width=19,
+                font=(FONT_FAMILY_UI, 16, "bold"),
+                parent=self.root,
+                variant="blue",
             ),
-            "student_btn": tk.Button(
-                self.root,
+            "student_btn": self._create_glossy_button(
                 text="Student Login",
-                width=15,
-                height=2,
-                bg="#2196F3",
-                fg="white",
-                command=lambda: self._play_button_and_execute(self.student_login),
+                callback=self.student_login,
+                width=19,
+                font=(FONT_FAMILY_UI, 16, "bold"),
+                parent=self.root,
+                variant="green",
             ),
-            "guest_btn": tk.Button(
-                self.root,
+            "guest_btn": self._create_glossy_button(
                 text="Guest Login (T20)",
-                width=15,
-                height=2,
-                bg="#795548",
-                fg="white",
-                command=lambda: self._play_button_and_execute(self.start_t20_flow),
+                callback=self.start_t20_flow,
+                width=19,
+                font=(FONT_FAMILY_UI, 16, "bold"),
+                parent=self.root,
+                variant="amber",
             ),
         }
 
@@ -2806,82 +2916,80 @@ class AsteroidMathGame:
         scaled_glow_radius = glow_radius * start_scale
         start_font_size = max(min_font_size, int(font_base_size * start_scale))
 
-        # Pick a color theme so bubbles don't always look identical.
         asteroid_themes = [
-            {  # classic orange
-                "glow_start": "#8A2E00",
-                "glow_end": "#FF8C1A",
-                "fill_start": "#FF6A00",
-                "fill_end": "#FF9E2C",
-                "outline_start": "#FFB347",
-                "outline_end": "#FFE2B2",
-                "highlight_start": "#FFD08A",
-                "highlight_end": "#FFF7D6",
-                "txt_back_start": "#2A120C",
-                "txt_back_end": "#412018",
-                "txt_back_outline_start": "#8B3A14",
-                "txt_back_outline_end": "#E87B34",
-                "txt_shadow_start": "#24100A",
-                "txt_shadow_end": "#3A1A10",
-                "txt_start": "#FFE0BA",
-                "txt_end": "#FFFDF4",
-            },
-            {  # blue/cyan
-                "glow_start": "#073B6D",
-                "glow_end": "#1E88E5",
-                "fill_start": "#0277BD",
-                "fill_end": "#4FC3F7",
-                "outline_start": "#81D4FA",
-                "outline_end": "#E1F5FE",
-                "highlight_start": "#B3E5FC",
-                "highlight_end": "#E3F2FD",
-                "txt_back_start": "#00172A",
-                "txt_back_end": "#02243D",
-                "txt_back_outline_start": "#0D47A1",
-                "txt_back_outline_end": "#64B5F6",
-                "txt_shadow_start": "#02111F",
-                "txt_shadow_end": "#063152",
-                "txt_start": "#E3F2FD",
+            {
+                "trail_outer_start": "#311204",
+                "trail_outer_end": "#FF7A22",
+                "trail_inner_start": "#7D2403",
+                "trail_inner_end": "#FFD08C",
+                "glow_start": "#5B2200",
+                "glow_end": "#FF8F32",
+                "fill_start": "#363C48",
+                "fill_end": "#616977",
+                "outline_start": "#8D97A8",
+                "outline_end": "#D5DBE4",
+                "highlight_start": "#BCC7D7",
+                "highlight_end": "#F6F9FF",
+                "lava_start": "#AC2200",
+                "lava_end": "#FFBF2C",
+                "crater_start": "#1C2230",
+                "crater_end": "#394152",
+                "txt_back_start": "#08131E",
+                "txt_back_end": "#112336",
+                "txt_back_outline_start": "#4A657F",
+                "txt_back_outline_end": "#87A7C6",
+                "txt_shadow_start": "#040A12",
+                "txt_shadow_end": "#101B27",
+                "txt_start": "#F8FBFF",
                 "txt_end": "#FFFFFF",
             },
-            {  # emerald green
-                "glow_start": "#064E3B",
-                "glow_end": "#10B981",
-                "fill_start": "#059669",
-                "fill_end": "#34D399",
-                "outline_start": "#6EE7B7",
-                "outline_end": "#D1FAE5",
-                "highlight_start": "#A7F3D0",
-                "highlight_end": "#ECFDF5",
-                "txt_back_start": "#022C22",
-                "txt_back_end": "#064E3B",
-                "txt_back_outline_start": "#047857",
-                "txt_back_outline_end": "#6EE7B7",
-                "txt_shadow_start": "#012019",
-                "txt_shadow_end": "#03543F",
-                "txt_start": "#ECFDF5",
-                "txt_end": "#FFFFFF",
-            },
-            {  # magenta/purple
-                "glow_start": "#4A148C",
-                "glow_end": "#AB47BC",
-                "fill_start": "#8E24AA",
-                "fill_end": "#CE93D8",
-                "outline_start": "#E1BEE7",
-                "outline_end": "#F3E5F5",
-                "highlight_start": "#F3E5F5",
+            {
+                "trail_outer_start": "#25120A",
+                "trail_outer_end": "#FF9448",
+                "trail_inner_start": "#5F2208",
+                "trail_inner_end": "#FFE0AA",
+                "glow_start": "#6A2D08",
+                "glow_end": "#FFB05A",
+                "fill_start": "#404550",
+                "fill_end": "#727986",
+                "outline_start": "#9EA6B4",
+                "outline_end": "#E3E8EF",
+                "highlight_start": "#CBD4E1",
                 "highlight_end": "#FFFFFF",
-                "txt_back_start": "#2E0035",
-                "txt_back_end": "#4A148C",
-                "txt_back_outline_start": "#7B1FA2",
-                "txt_back_outline_end": "#BA68C8",
-                "txt_shadow_start": "#210025",
-                "txt_shadow_end": "#4A0E64",
-                "txt_start": "#FCE4FF",
+                "lava_start": "#C23A06",
+                "lava_end": "#FFD24A",
+                "crater_start": "#242A35",
+                "crater_end": "#404958",
+                "txt_back_start": "#0A1624",
+                "txt_back_end": "#142B40",
+                "txt_back_outline_start": "#58728E",
+                "txt_back_outline_end": "#9CC0E0",
+                "txt_shadow_start": "#050B14",
+                "txt_shadow_end": "#122031",
+                "txt_start": "#F4F8FF",
                 "txt_end": "#FFFFFF",
             },
         ]
         theme = random.choice(asteroid_themes)
+
+        trail_outer = self.canvas.create_oval(
+            center_x - (scaled_radius * 0.92),
+            center_y - (scaled_radius * 2.1),
+            center_x + (scaled_radius * 0.92),
+            center_y - (scaled_radius * 0.15),
+            fill=theme["trail_outer_start"],
+            outline="",
+            tags=(self.gameplay_canvas_tag,),
+        )
+        trail_inner = self.canvas.create_oval(
+            center_x - (scaled_radius * 0.48),
+            center_y - (scaled_radius * 1.72),
+            center_x + (scaled_radius * 0.48),
+            center_y - (scaled_radius * 0.22),
+            fill=theme["trail_inner_start"],
+            outline="",
+            tags=(self.gameplay_canvas_tag,),
+        )
 
         glow = self.canvas.create_oval(
             center_x - scaled_glow_radius,
@@ -2889,7 +2997,7 @@ class AsteroidMathGame:
             center_x + scaled_glow_radius,
             center_y + scaled_glow_radius,
             outline=theme["glow_start"],
-            width=2,
+            width=3,
             tags=(self.gameplay_canvas_tag,),
         )
         asteroid = self.canvas.create_oval(
@@ -2899,7 +3007,16 @@ class AsteroidMathGame:
             center_y + scaled_radius,
             fill=theme["fill_start"],
             outline=theme["outline_start"],
-            width=2,
+            width=3,
+            tags=(self.gameplay_canvas_tag,),
+        )
+        lava = self.canvas.create_oval(
+            center_x - (scaled_radius * 0.54),
+            center_y + (scaled_radius * 0.12),
+            center_x + (scaled_radius * 0.50),
+            center_y + (scaled_radius * 0.80),
+            fill=theme["lava_start"],
+            outline="",
             tags=(self.gameplay_canvas_tag,),
         )
         highlight = self.canvas.create_oval(
@@ -2908,6 +3025,24 @@ class AsteroidMathGame:
             center_x - (scaled_radius * 0.02),
             center_y - (scaled_radius * 0.08),
             fill=theme["highlight_start"],
+            outline="",
+            tags=(self.gameplay_canvas_tag,),
+        )
+        crater_a = self.canvas.create_oval(
+            center_x + (scaled_radius * 0.05),
+            center_y - (scaled_radius * 0.18),
+            center_x + (scaled_radius * 0.34),
+            center_y + (scaled_radius * 0.08),
+            fill=theme["crater_start"],
+            outline="",
+            tags=(self.gameplay_canvas_tag,),
+        )
+        crater_b = self.canvas.create_oval(
+            center_x - (scaled_radius * 0.22),
+            center_y + (scaled_radius * 0.02),
+            center_x,
+            center_y + (scaled_radius * 0.24),
+            fill=theme["crater_start"],
             outline="",
             tags=(self.gameplay_canvas_tag,),
         )
@@ -2949,7 +3084,12 @@ class AsteroidMathGame:
         self.canvas.tag_raise(label)
 
         asteroid_item = {
+            "trail_outer": trail_outer,
+            "trail_inner": trail_inner,
             "obj": asteroid,
+            "lava": lava,
+            "crater_a": crater_a,
+            "crater_b": crater_b,
             "txt_backdrop": label_backdrop,
             "txt_shadow": label_shadow,
             "txt": label,
@@ -2966,7 +3106,19 @@ class AsteroidMathGame:
             "theme": theme,
         }
         if self.screen_shake_canvas is self.canvas and (self.screen_shake_offset_x or self.screen_shake_offset_y):
-            for key in ("glow", "obj", "highlight", "txt_backdrop", "txt_shadow", "txt"):
+            for key in (
+                "trail_outer",
+                "trail_inner",
+                "glow",
+                "obj",
+                "lava",
+                "highlight",
+                "crater_a",
+                "crater_b",
+                "txt_backdrop",
+                "txt_shadow",
+                "txt",
+            ):
                 self.canvas.move(
                     asteroid_item[key],
                     self.screen_shake_offset_x,
@@ -2997,7 +3149,17 @@ class AsteroidMathGame:
         scale_ratio = new_scale / current_scale
 
         if abs(scale_ratio - 1.0) > 0.0001:
-            for key in ("glow", "obj", "highlight", "txt_backdrop"):
+            for key in (
+                "trail_outer",
+                "trail_inner",
+                "glow",
+                "obj",
+                "lava",
+                "highlight",
+                "crater_a",
+                "crater_b",
+                "txt_backdrop",
+            ):
                 canvas.scale(
                     asteroid_item[key],
                     asteroid_item["center_x"],
@@ -3016,38 +3178,66 @@ class AsteroidMathGame:
         )
 
         theme = asteroid_item.get("theme") or {
-            "glow_start": "#8A2E00",
-            "glow_end": "#FF8C1A",
-            "fill_start": "#FF6A00",
-            "fill_end": "#FF9E2C",
-            "outline_start": "#FFB347",
-            "outline_end": "#FFE2B2",
-            "highlight_start": "#FFD08A",
-            "highlight_end": "#FFF7D6",
-            "txt_back_start": "#2A120C",
-            "txt_back_end": "#412018",
-            "txt_back_outline_start": "#8B3A14",
-            "txt_back_outline_end": "#E87B34",
-            "txt_shadow_start": "#24100A",
-            "txt_shadow_end": "#3A1A10",
-            "txt_start": "#FFE0BA",
-            "txt_end": "#FFFDF4",
+            "trail_outer_start": "#311204",
+            "trail_outer_end": "#FF7A22",
+            "trail_inner_start": "#7D2403",
+            "trail_inner_end": "#FFD08C",
+            "glow_start": "#5B2200",
+            "glow_end": "#FF8F32",
+            "fill_start": "#363C48",
+            "fill_end": "#616977",
+            "outline_start": "#8D97A8",
+            "outline_end": "#D5DBE4",
+            "highlight_start": "#BCC7D7",
+            "highlight_end": "#F6F9FF",
+            "lava_start": "#AC2200",
+            "lava_end": "#FFBF2C",
+            "crater_start": "#1C2230",
+            "crater_end": "#394152",
+            "txt_back_start": "#08131E",
+            "txt_back_end": "#112336",
+            "txt_back_outline_start": "#4A657F",
+            "txt_back_outline_end": "#87A7C6",
+            "txt_shadow_start": "#040A12",
+            "txt_shadow_end": "#101B27",
+            "txt_start": "#F8FBFF",
+            "txt_end": "#FFFFFF",
         }
 
+        canvas.itemconfig(
+            asteroid_item["trail_outer"],
+            fill=_blend_hex(theme["trail_outer_start"], theme["trail_outer_end"], eased_progress),
+        )
+        canvas.itemconfig(
+            asteroid_item["trail_inner"],
+            fill=_blend_hex(theme["trail_inner_start"], theme["trail_inner_end"], eased_progress),
+        )
         canvas.itemconfig(
             asteroid_item["obj"],
             fill=_blend_hex(theme["fill_start"], theme["fill_end"], eased_progress),
             outline=_blend_hex(theme["outline_start"], theme["outline_end"], eased_progress),
-            width=2,
+            width=max(2, int(round(2 + eased_progress))),
         )
         canvas.itemconfig(
             asteroid_item["glow"],
             outline=_blend_hex(theme["glow_start"], theme["glow_end"], eased_progress),
-            width=max(2, int(round(2 + (3 * eased_progress)))),
+            width=max(3, int(round(3 + (4 * eased_progress)))),
+        )
+        canvas.itemconfig(
+            asteroid_item["lava"],
+            fill=_blend_hex(theme["lava_start"], theme["lava_end"], eased_progress),
         )
         canvas.itemconfig(
             asteroid_item["highlight"],
             fill=_blend_hex(theme["highlight_start"], theme["highlight_end"], eased_progress),
+        )
+        canvas.itemconfig(
+            asteroid_item["crater_a"],
+            fill=_blend_hex(theme["crater_start"], theme["crater_end"], eased_progress),
+        )
+        canvas.itemconfig(
+            asteroid_item["crater_b"],
+            fill=_blend_hex(theme["crater_start"], theme["crater_end"], eased_progress),
         )
         canvas.itemconfig(
             asteroid_item["txt_backdrop"],
@@ -3078,7 +3268,19 @@ class AsteroidMathGame:
         if canvas is None or not canvas.winfo_exists():
             return
 
-        for key in ("glow", "obj", "highlight", "txt_backdrop", "txt_shadow", "txt"):
+        for key in (
+            "trail_outer",
+            "trail_inner",
+            "glow",
+            "obj",
+            "lava",
+            "highlight",
+            "crater_a",
+            "crater_b",
+            "txt_backdrop",
+            "txt_shadow",
+            "txt",
+        ):
             item_id = asteroid_item.get(key)
             if not item_id:
                 continue
@@ -3096,18 +3298,8 @@ class AsteroidMathGame:
         # If caller didn't specify a palette, pick a fresh color scheme
         # each time so the burst isn't always the same yellow/white.
         if debris_colors is None:
-            color_palettes = [
-                ("#FFF176", "#FFD54F", "#FFB74D", "#FFE082"),  # warm yellow/orange
-                ("#81D4FA", "#4FC3F7", "#29B6F6", "#B3E5FC"),  # bright cyan/blue
-                ("#A5D6A7", "#66BB6A", "#43A047", "#C8E6C9"),  # greens
-                ("#CE93D8", "#BA68C8", "#AB47BC", "#E1BEE7"),  # violets
-                ("#FFAB91", "#FF8A65", "#FF7043", "#FFE0B2"),  # coral
-            ]
-            palette = random.choice(color_palettes)
-            flash_color = palette[1]
-            debris_colors = palette
-        else:
-            debris_colors = debris_colors
+            debris_colors = ("#FFD36B", "#FFB347", "#FF7A1A", "#FFE9B5")
+            flash_color = "#FF9E3D"
 
         flash = canvas.create_oval(
             center_x - 14,
@@ -4509,29 +4701,29 @@ def show_admin_panel(root, user, handle_logout, handle_upload):
         login = student["login_id"] if student["login_id"] else "-"
         return f"{student['name']} | Std {student['grade']} | Batch {batch} | Roll {enrollment} | Login {login}"
 
-    color_bg = "#EEF3F9"
-    color_surface = "#FFFFFF"
-    color_surface_soft = "#F6F9FD"
-    color_sidebar = "#102B4A"
-    color_sidebar_surface = "#1A3F6B"
-    color_sidebar_border = "#2A5384"
-    color_sidebar_text = "#F2F7FF"
-    color_sidebar_primary = "#3B78DF"
-    color_sidebar_primary_active = "#2F66C2"
-    color_sidebar_neutral = "#344F74"
-    color_sidebar_neutral_active = "#2A4060"
-    color_sidebar_logout = "#C84711"
-    color_sidebar_logout_active = "#A43A0E"
-    color_text = "#13253F"
-    color_muted = "#5C6F8A"
-    color_border = "#D7E1EF"
-    color_focus = APP_ACCENT_COLOR
-    color_primary = APP_ACCENT_COLOR
-    color_primary_active = "#439A46"
-    color_success = APP_ACCENT_COLOR
-    color_success_active = "#439A46"
-    color_danger = "#C64A4A"
-    color_danger_active = "#A23D3D"
+    color_bg = "#07111F"
+    color_surface = "#0D1A2C"
+    color_surface_soft = "#12243A"
+    color_sidebar = "#081321"
+    color_sidebar_surface = "#11253B"
+    color_sidebar_border = "#1F3B59"
+    color_sidebar_text = "#F4F8FF"
+    color_sidebar_primary = "#2E7CFF"
+    color_sidebar_primary_active = "#235FCA"
+    color_sidebar_neutral = "#17314A"
+    color_sidebar_neutral_active = "#214767"
+    color_sidebar_logout = "#C65833"
+    color_sidebar_logout_active = "#A34224"
+    color_text = "#F4F8FF"
+    color_muted = "#8EA6C1"
+    color_border = "#1D3652"
+    color_focus = "#73C9FF"
+    color_primary = "#FF8A2B"
+    color_primary_active = "#D96E14"
+    color_success = "#43C0C6"
+    color_success_active = "#2A9AA0"
+    color_danger = "#C95D4A"
+    color_danger_active = "#A44637"
 
     root.configure(bg=color_bg)
     panel_wrap.configure(bg=color_bg)
@@ -4545,10 +4737,10 @@ def show_admin_panel(root, user, handle_logout, handle_upload):
         pass
     style.configure(
         "Admin.Vertical.TScrollbar",
-        background="#C5D2E4",
+        background="#16314B",
         troughcolor=color_bg,
         bordercolor=color_bg,
-        arrowcolor="#4E607A",
+        arrowcolor="#8FB5DA",
         relief="flat",
     )
     panel_scrollbar.configure(style="Admin.Vertical.TScrollbar")
@@ -4558,7 +4750,7 @@ def show_admin_panel(root, user, handle_logout, handle_upload):
             "primary": (color_primary, color_primary_active),
             "success": (color_success, color_success_active),
             "danger": (color_danger, color_danger_active),
-            "neutral": ("#6C7B91", "#5A6A82"),
+            "neutral": ("#203650", "#294563"),
             "sidebar_primary": (color_sidebar_primary, color_sidebar_primary_active),
             "sidebar_neutral": (color_sidebar_neutral, color_sidebar_neutral_active),
             "sidebar_logout": (color_sidebar_logout, color_sidebar_logout_active),
@@ -4593,6 +4785,7 @@ def show_admin_panel(root, user, handle_logout, handle_upload):
             highlightcolor=border,
         )
         card.pack(fill="x", pady=pady)
+        tk.Frame(card, bg=border, height=2).pack(fill="x")
         tk.Label(
             card,
             text=title,
@@ -4627,6 +4820,10 @@ def show_admin_panel(root, user, handle_logout, handle_upload):
                 welcome_name = admin_info.get("login_id")
         except Exception:
             pass
+    try:
+        student_count = len(get_all_students())
+    except Exception:
+        student_count = 0
 
     header = tk.Frame(frame, bg=color_bg)
     header.pack(fill="x", pady=(0, 14))
@@ -4637,7 +4834,7 @@ def show_admin_panel(root, user, handle_logout, handle_upload):
         font=("Segoe UI Symbol", 14, "bold"),
         bg=color_surface,
         fg=color_text,
-        activebackground="#DFE8F4",
+        activebackground="#16314B",
         activeforeground=color_text,
         relief="flat",
         bd=0,
@@ -4655,8 +4852,8 @@ def show_admin_panel(root, user, handle_logout, handle_upload):
 
     tk.Label(
         heading_block,
-        text=f"Welcome {welcome_name} \U0001F44B\U0001F3FB",
-        fg=APP_ACCENT_COLOR,
+        text=f"Welcome {welcome_name}",
+        fg="#73C9FF",
         bg=color_bg,
         font=(FONT_FAMILY_TEXT, 11, "bold"),
     ).pack(anchor="center")
@@ -4664,18 +4861,44 @@ def show_admin_panel(root, user, handle_logout, handle_upload):
     tk.Label(
         heading_block,
         text="Admin Panel",
-        font=(FONT_FAMILY_TEXT, 22, "bold"),
+        font=(FONT_FAMILY_DISPLAY, 26, "bold"),
         fg=color_text,
         bg=color_bg,
     ).pack(anchor="center")
 
     tk.Label(
         heading_block,
-        text="Create student logins and share credentials with students.",
+        text="Create credentials, manage student access, upload quiz banks, and review performance from one console.",
         fg=color_muted,
         bg=color_bg,
         font=(FONT_FAMILY_TEXT, 11),
     ).pack(anchor="center", pady=(2, 0))
+
+    summary_row = tk.Frame(frame, bg=color_bg)
+    summary_row.pack(fill="x", pady=(0, 16))
+
+    summary_cards = [
+        ("Students", str(student_count), "Active records in the roster"),
+        ("Access", "Passwords On", "Student logins now use stored credentials"),
+        ("Progress", "Live Tracking", "Basic, advanced, and T20 results"),
+    ]
+    for index, (label, value, hint) in enumerate(summary_cards):
+        card = tk.Frame(
+            summary_row,
+            bg=color_surface,
+            padx=16,
+            pady=14,
+            highlightthickness=1,
+            highlightbackground=color_border,
+            highlightcolor=color_border,
+        )
+        card.grid(row=0, column=index, padx=(0, 12 if index < len(summary_cards) - 1 else 0), sticky="nsew")
+        tk.Frame(card, bg="#FF8A2B" if index == 0 else "#73C9FF", height=3).pack(fill="x", pady=(0, 12))
+        tk.Label(card, text=label, bg=color_surface, fg=color_muted, font=(FONT_FAMILY_UI, 9, "bold")).pack(anchor="w")
+        tk.Label(card, text=value, bg=color_surface, fg=color_text, font=(FONT_FAMILY_UI, 18, "bold")).pack(anchor="w", pady=(8, 2))
+        tk.Label(card, text=hint, bg=color_surface, fg=color_muted, font=(FONT_FAMILY_UI, 9)).pack(anchor="w")
+    for index in range(len(summary_cards)):
+        summary_row.grid_columnconfigure(index, weight=1)
 
     layout = tk.Frame(frame, bg=color_bg)
     layout.pack(fill="both", expand=True)
@@ -4758,38 +4981,38 @@ def show_admin_panel(root, user, handle_logout, handle_upload):
     _, output = create_card(
         main_content,
         "Generated Credentials",
-        bg="#F1F8F2",
+        bg=color_surface,
         fg=color_text,
-        border="#D4E8D6",
+        border="#22405C",
         pady=(0, 10),
         padx=16,
     )
 
-    cards = tk.Frame(output, bg="#F1F8F2")
+    cards = tk.Frame(output, bg=color_surface)
     cards.pack(fill="x")
 
     login_card = tk.Frame(
         cards,
-        bg="#FFFFFF",
+        bg=color_surface_soft,
         bd=0,
         highlightthickness=1,
-        highlightbackground="#CFE1D3",
-        highlightcolor="#CFE1D3",
+        highlightbackground="#294461",
+        highlightcolor="#294461",
     )
     login_card.pack(fill="x", pady=(0, 6))
-    login_lbl = tk.Label(login_card, text="Login ID: -", font=(FONT_FAMILY_MONO, 11, "bold"), bg="#FFFFFF", fg=color_text)
+    login_lbl = tk.Label(login_card, text="Login ID: -", font=(FONT_FAMILY_MONO, 11, "bold"), bg=color_surface_soft, fg=color_text)
     login_lbl.pack(anchor="w", padx=10, pady=8)
 
     pass_card = tk.Frame(
         cards,
-        bg="#FFFFFF",
+        bg=color_surface_soft,
         bd=0,
         highlightthickness=1,
-        highlightbackground="#CFE1D3",
-        highlightcolor="#CFE1D3",
+        highlightbackground="#294461",
+        highlightcolor="#294461",
     )
     pass_card.pack(fill="x")
-    pass_lbl = tk.Label(pass_card, text="Password: -", font=(FONT_FAMILY_MONO, 11, "bold"), bg="#FFFFFF", fg=color_text)
+    pass_lbl = tk.Label(pass_card, text="Password: -", font=(FONT_FAMILY_MONO, 11, "bold"), bg=color_surface_soft, fg=color_text)
     pass_lbl.pack(anchor="w", padx=10, pady=8)
 
     def copy_generated_credentials():
@@ -4808,16 +5031,16 @@ def show_admin_panel(root, user, handle_logout, handle_upload):
         root.update_idletasks()
         messagebox.showinfo("Copied", "Generated credentials copied to clipboard.")
 
-    copy_row = tk.Frame(output, bg="#F1F8F2")
+    copy_row = tk.Frame(output, bg=color_surface)
     copy_row.pack(fill="x", pady=(8, 0))
     copy_btn = tk.Button(
         copy_row,
         text="\U0001F4CB Copy",
         command=copy_generated_credentials,
         font=(FONT_FAMILY_TEXT, 9, "bold"),
-        bg="#E4F3E6",
+        bg="#173149",
         fg=color_text,
-        activebackground="#D3EAD6",
+        activebackground="#224560",
         activeforeground=color_text,
         relief="flat",
         bd=0,
@@ -4859,9 +5082,9 @@ def show_admin_panel(root, user, handle_logout, handle_upload):
         text="Show",
         command=lambda: (sound_manager.play_button_sound(), show_admin_pass_var.set(not show_admin_pass_var.get()), toggle_admin_password_visibility()),
         font=(FONT_FAMILY_UI, 9, "bold"),
-        bg="#E4EAF3",
+        bg="#173149",
         fg=color_text,
-        activebackground="#D5DEEA",
+        activebackground="#224560",
         activeforeground=color_text,
         relief="flat",
         bd=0,
@@ -5411,18 +5634,18 @@ def show_admin_panel(root, user, handle_logout, handle_upload):
         )
         style.map(
             "Progress.Treeview",
-            background=[("selected", "#2F6FB4")],
+            background=[("selected", "#2E7CFF")],
             foreground=[("selected", "white")],
         )
         style.configure(
             "Progress.Treeview.Heading",
-            background="#E5EDF8",
+            background="#13253C",
             foreground=color_text,
             font=(FONT_FAMILY_UI, 10, "bold"),
             relief="flat",
             padding=(8, 7),
         )
-        style.map("Progress.Treeview.Heading", background=[("active", "#D9E5F5")])
+        style.map("Progress.Treeview.Heading", background=[("active", "#173149")])
 
         tree = ttk.Treeview(
             table_wrap,
@@ -5459,7 +5682,7 @@ def show_admin_panel(root, user, handle_logout, handle_upload):
         tree.column("last_attempt", width=170, anchor="center")
 
         tree.tag_configure("even", background=color_surface_soft)
-        tree.tag_configure("odd", background="#EDF3FB")
+        tree.tag_configure("odd", background="#173149")
 
         y_scroll = ttk.Scrollbar(table_wrap, orient="vertical", command=tree.yview)
         x_scroll = ttk.Scrollbar(table_wrap, orient="horizontal", command=tree.xview)
@@ -5707,7 +5930,7 @@ class LoginScreen(tk.Frame):
         self.on_back()
 
     def __init__(self, master, on_login_success, on_back, heading_text="Login"):
-        super().__init__(master, bg="#0B0D17")
+        super().__init__(master, bg=APP_BG_COLOR)
         self.on_login_success = on_login_success
         self.on_back = on_back
         self.heading_text = heading_text
@@ -5723,60 +5946,89 @@ class LoginScreen(tk.Frame):
         ).pack(anchor="w", padx=20, pady=10)
 
         # Center column that holds the title + card; expands so it stays centered
-        content = tk.Frame(self, bg="#0B0D17")
+        content = tk.Frame(self, bg=APP_BG_COLOR)
         content.pack(fill="both", expand=True)
 
-        center_column = tk.Frame(content, bg="#0B0D17")
+        center_column = tk.Frame(content, bg=APP_BG_COLOR)
         center_column.pack(expand=True)
 
         tk.Label(
             center_column,
-            text="Value Your Minds",
-            font=(FONT_FAMILY_TEXT, 28, "bold"),
+            text="Math Game",
+            font=(FONT_FAMILY_DISPLAY, 30, "bold"),
             fg=APP_TITLE_COLOR,
-            bg="#0B0D17",
-        ).pack(pady=(10, 6))
+            bg=APP_BG_COLOR,
+        ).pack(pady=(10, 4))
         tk.Label(
             center_column,
             text=self.heading_text,
-            font=(FONT_FAMILY_TEXT, 14, "bold"),
-            fg="#A5B1CF",
-            bg="#0B0D17",
-        ).pack(pady=(0, 18))
+            font=(FONT_FAMILY_TEXT, 15, "bold"),
+            fg="#7CCBFF",
+            bg=APP_BG_COLOR,
+        ).pack(pady=(0, 8))
+        tk.Label(
+            center_column,
+            text="Secure access to student play, admin controls, and progress insights.",
+            font=(FONT_FAMILY_TEXT, 10),
+            fg="#8FAAC6",
+            bg=APP_BG_COLOR,
+        ).pack(pady=(0, 22))
 
         # Compute a responsive target width so the card feels as wide
         # as the main menu column but still keeps side margins.
         self.update_idletasks()
         available_w = max(480, self.winfo_width() or 0)
-        card_width = max(520, min(available_w - 200, 780))
+        card_width = max(560, min(available_w - 180, 820))
 
         # Login card: wider & taller, centered within the column
         login_card = tk.Frame(
             center_column,
             bg=APP_SURFACE_COLOR,
-            padx=32,
-            pady=32,
+            padx=34,
+            pady=30,
             highlightthickness=1,
-            highlightbackground="#2C3142",
+            highlightbackground="#27425E",
             width=card_width,
-            height=380,
+            height=420,
         )
         login_card.pack(padx=32, pady=(0, 64))
         # Respect the explicit width/height instead of shrinking to children
         login_card.pack_propagate(False)
 
+        top_strip = tk.Frame(login_card, bg="#FF8A2B", height=6)
+        top_strip.pack(fill="x", pady=(0, 18))
+
+        status_row = tk.Frame(login_card, bg=APP_SURFACE_COLOR)
+        status_row.pack(fill="x", pady=(0, 10))
+        tk.Label(
+            status_row,
+            text="AUTH PORTAL",
+            font=(FONT_FAMILY_UI, 9, "bold"),
+            fg="#74CFFF",
+            bg=APP_SURFACE_COLOR,
+        ).pack(side="left")
+        tk.Label(
+            status_row,
+            text="LIVE",
+            font=(FONT_FAMILY_UI, 9, "bold"),
+            fg="#091726",
+            bg="#7EE081",
+            padx=10,
+            pady=3,
+        ).pack(side="right")
+
         tk.Label(
             login_card,
             text="Welcome Back",
-            font=(FONT_FAMILY_TEXT, 20, "bold"),
+            font=(FONT_FAMILY_TEXT, 22, "bold"),
             fg=APP_TEXT_COLOR,
             bg=APP_SURFACE_COLOR
         ).pack(anchor="w")
         tk.Label(
             login_card,
-            text="Sign in to continue your challenge.",
+            text="Sign in to continue your challenge in the space-console arena.",
             font=(FONT_FAMILY_TEXT, 10),
-            fg="#A5B1CF",
+            fg="#A5BCD7",
             bg=APP_SURFACE_COLOR
         ).pack(anchor="w", pady=(3, 20))
 
@@ -5790,10 +6042,14 @@ class LoginScreen(tk.Frame):
         self.login_id = tk.Entry(
             login_card,
             font=(FONT_FAMILY_TEXT, 11),
-            bg="#111522",
+            bg="#091726",
             fg=APP_TEXT_COLOR,
             insertbackground=APP_TEXT_COLOR,
-            relief="flat"
+            relief="flat",
+            bd=0,
+            highlightthickness=1,
+            highlightbackground="#21374F",
+            highlightcolor="#74CFFF",
         )
         self.login_id.pack(fill="x", pady=(6, 14), ipady=8)
 
@@ -5810,9 +6066,9 @@ class LoginScreen(tk.Frame):
         self.password_hide_label = "\U0001F441 Hide"
         password_row = tk.Frame(
             login_card,
-            bg="#111522",
+            bg="#091726",
             highlightthickness=1,
-            highlightbackground="#27314D"
+            highlightbackground="#21374F"
         )
         password_row.pack(fill="x", pady=(6, 18))
 
@@ -5820,7 +6076,7 @@ class LoginScreen(tk.Frame):
             password_row,
             font=(FONT_FAMILY_TEXT, 11),
             show="*",
-            bg="#111522",
+            bg="#091726",
             fg=APP_TEXT_COLOR,
             insertbackground=APP_TEXT_COLOR,
             relief="flat",
@@ -5834,9 +6090,9 @@ class LoginScreen(tk.Frame):
             text=self.password_show_label,
             command=self._toggle_password_visibility,
             font=("Segoe UI Emoji", 9, "bold"),
-            bg="#17243A",
+            bg="#173149",
             fg="#C9D7FF",
-            activebackground="#20314D",
+            activebackground="#23415E",
             activeforeground=APP_TEXT_COLOR,
             relief="flat",
             bd=0,
@@ -5845,11 +6101,11 @@ class LoginScreen(tk.Frame):
             cursor="hand2"
         )
         self.password_toggle_btn.pack(side="right", padx=(0, 8), pady=8, ipady=6)
-        self.password_toggle_btn.bind("<Enter>", lambda _: self.password_toggle_btn.config(bg="#20314D"))
-        self.password_toggle_btn.bind("<Leave>", lambda _: self.password_toggle_btn.config(bg="#17243A"))
+        self.password_toggle_btn.bind("<Enter>", lambda _: self.password_toggle_btn.config(bg="#23415E"))
+        self.password_toggle_btn.bind("<Leave>", lambda _: self.password_toggle_btn.config(bg="#173149"))
         self._set_password_visibility(False)
 
-        button_base = tk.Frame(login_card, bg="#0A2D39")
+        button_base = tk.Frame(login_card, bg=APP_SURFACE_COLOR)
         button_base.pack(fill="x")
 
         sign_in_btn = tk.Button(
@@ -5858,14 +6114,14 @@ class LoginScreen(tk.Frame):
             command=self._submit,
             font=(FONT_FAMILY_TEXT, 11, "bold"),
             bg=APP_ACCENT_COLOR,
-            fg=APP_BG_COLOR,
-            activebackground="#39DCE4",
-            activeforeground=APP_BG_COLOR,
+            fg="#07111F",
+            activebackground="#FFAA54",
+            activeforeground="#07111F",
             relief="flat",
             bd=0,
             cursor="hand2"
         )
-        sign_in_btn.pack(fill="x", ipady=9, pady=(0, 4))
+        sign_in_btn.pack(fill="x", ipady=11, pady=(2, 4))
 
         def raise_sign_in():
             sign_in_btn.pack_configure(pady=(0, 4))
@@ -5873,10 +6129,10 @@ class LoginScreen(tk.Frame):
         def press_sign_in():
             sign_in_btn.pack_configure(pady=(3, 1))
 
-        sign_in_btn.bind("<Enter>", lambda _: sign_in_btn.config(bg="#61F7FF"))
+        sign_in_btn.bind("<Enter>", lambda _: sign_in_btn.config(bg="#FFAA54"))
         sign_in_btn.bind("<Leave>", lambda _: (raise_sign_in(), sign_in_btn.config(bg=APP_ACCENT_COLOR)))
-        sign_in_btn.bind("<ButtonPress-1>", lambda _: (press_sign_in(), sign_in_btn.config(bg="#39DCE4")))
-        sign_in_btn.bind("<ButtonRelease-1>", lambda _: (raise_sign_in(), sign_in_btn.config(bg="#61F7FF")))
+        sign_in_btn.bind("<ButtonPress-1>", lambda _: (press_sign_in(), sign_in_btn.config(bg="#D96E14")))
+        sign_in_btn.bind("<ButtonRelease-1>", lambda _: (raise_sign_in(), sign_in_btn.config(bg="#FFAA54")))
 
         self.login_id.bind("<Return>", lambda _: self.password.focus_set())
         self.password.bind("<Return>", lambda _: self._submit())
