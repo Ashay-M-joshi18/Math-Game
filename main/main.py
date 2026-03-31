@@ -7474,6 +7474,7 @@ if QApplication is not None:
             self._stars = []
             self._starfield_size = None
             self._space_phase = 0.0
+            self._last_space_tick = time.perf_counter()
 
             self.setWindowTitle(f"{heading_text} - Math Game")
             self.resize(1040, 640)
@@ -7612,7 +7613,7 @@ if QApplication is not None:
             )
             self._space_timer = QTimer(self)
             self._space_timer.timeout.connect(self._advance_space_scene)
-            self._space_timer.start(40)
+            self._space_timer.start(16)
             self._build_ui()
 
         def _build_ui(self):
@@ -7904,7 +7905,10 @@ if QApplication is not None:
             self._starfield_size = size_key
 
         def _advance_space_scene(self):
-            self._space_phase = (self._space_phase + 0.045) % (math.pi * 2)
+            now = time.perf_counter()
+            dt = min(0.05, max(0.0, now - self._last_space_tick))
+            self._last_space_tick = now
+            self._space_phase = (self._space_phase + (dt * 1.55)) % math.tau
             self.update()
 
         def _draw_star(self, painter, x, y, size, brightness):
@@ -7938,10 +7942,10 @@ if QApplication is not None:
             painter.fillRect(self.rect(), QColor("#07111F"))
 
             phase = self._space_phase
-            saturn_dx = math.sin(phase * 0.62) * 6
-            saturn_dy = math.cos(phase * 0.44) * 4
-            mars_dx = math.cos(phase * 0.48) * 5
-            mars_dy = math.sin(phase * 0.71) * 4
+            saturn_dx = math.sin(phase * 0.92) * 7
+            saturn_dy = math.cos(phase * 0.68) * 5
+            mars_dx = math.cos(phase * 0.76) * 6
+            mars_dy = math.sin(phase * 0.98) * 5
             moon_angle = phase * 0.95
             moon_orbit_x = math.cos(moon_angle) * 24
             moon_orbit_y = math.sin(moon_angle) * 16
@@ -7969,6 +7973,12 @@ if QApplication is not None:
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawEllipse(QRectF(86 + saturn_dx, 136 + saturn_dy, 330, 112))
 
+            # Draw the rear Saturn ring first so the planet sits between back and front arcs.
+            ring_pen_back = QPen(QColor(255, 255, 255, 58))
+            ring_pen_back.setWidth(10)
+            painter.setPen(ring_pen_back)
+            painter.drawArc(QRectF(86 + saturn_dx, 136 + saturn_dy, 330, 112), 18 * 16, 144 * 16)
+
             painter.setPen(Qt.PenStyle.NoPen)
 
             saturn = QRadialGradient(256 + saturn_dx, 160 + saturn_dy, 140, 212 + saturn_dx, 124 + saturn_dy)
@@ -7990,11 +8000,6 @@ if QApplication is not None:
                 QRectF(188 + saturn_dx, 238 + saturn_dy, 112, 18),
             ):
                 painter.drawEllipse(rect)
-
-            ring_pen_back = QPen(QColor(255, 255, 255, 58))
-            ring_pen_back.setWidth(10)
-            painter.setPen(ring_pen_back)
-            painter.drawArc(QRectF(86 + saturn_dx, 136 + saturn_dy, 330, 112), 18 * 16, 144 * 16)
 
             mars = QRadialGradient(
                 self.width() - 180 + mars_dx,

@@ -4,7 +4,7 @@ import time
 import math
 
 from PySide6.QtCore import QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication,
     QBoxLayout,
@@ -110,6 +110,7 @@ class PortalWindow(QWidget):
         self._stars = []
         self._starfield_size = None
         self._space_phase = 0.0
+        self._last_space_tick = time.perf_counter()
 
         self.setWindowTitle("Math Game")
         self.resize(1260, 760)
@@ -181,7 +182,7 @@ class PortalWindow(QWidget):
         self.setObjectName("root")
         self._space_timer = QTimer(self)
         self._space_timer.timeout.connect(self._advance_space_scene)
-        self._space_timer.start(40)
+        self._space_timer.start(16)
         self._build_ui()
 
     def _build_ui(self):
@@ -427,18 +428,32 @@ class PortalWindow(QWidget):
         self._starfield_size = size_key
 
     def _advance_space_scene(self):
-        self._space_phase = (self._space_phase + 0.045) % (math.pi * 2)
+        now = time.perf_counter()
+        dt = min(0.05, max(0.0, now - self._last_space_tick))
+        self._last_space_tick = now
+        self._space_phase = (self._space_phase + (dt * 1.55)) % math.tau
         self.update()
 
     def _draw_star(self, painter, x, y, size, brightness):
-        glow_radius = size * (2.4 + (brightness * 0.9))
-        glow_alpha = int(28 + (brightness * 54))
-        core_alpha = int(170 + (brightness * 85))
+        sparkle = max(2.0, size * (1.0 + (brightness * 0.9)))
+        vertical_reach = max(3.0, sparkle * 1.7)
+        horizontal_reach = max(2.0, sparkle * 1.2)
+        inner_notch = max(1.0, sparkle * 0.42)
+        star_path = QPainterPath()
+        star_path.moveTo(x, y - vertical_reach)
+        star_path.lineTo(x + inner_notch, y - inner_notch)
+        star_path.lineTo(x + horizontal_reach, y)
+        star_path.lineTo(x + inner_notch, y + inner_notch)
+        star_path.lineTo(x, y + vertical_reach)
+        star_path.lineTo(x - inner_notch, y + inner_notch)
+        star_path.lineTo(x - horizontal_reach, y)
+        star_path.lineTo(x - inner_notch, y - inner_notch)
+        star_path.closeSubpath()
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor(56, 209, 255, glow_alpha))
-        painter.drawEllipse(QRectF(x - glow_radius, y - glow_radius, glow_radius * 2, glow_radius * 2))
-        painter.setBrush(QColor(255, 255, 255, core_alpha))
-        painter.drawEllipse(QRectF(x - size, y - size, size * 2, size * 2))
+        painter.setBrush(QColor(255, 255, 255))
+        painter.drawPath(star_path)
+        center_r = max(1.0, sparkle * 0.25)
+        painter.drawEllipse(QRectF(x - center_r, y - center_r, center_r * 2, center_r * 2))
 
     def paintEvent(self, event):
         self._ensure_stars()
@@ -447,10 +462,10 @@ class PortalWindow(QWidget):
         painter.fillRect(self.rect(), QColor("#07111F"))
 
         phase = self._space_phase
-        saturn_dx = math.sin(phase * 0.62) * 6
-        saturn_dy = math.cos(phase * 0.44) * 4
-        mars_dx = math.cos(phase * 0.48) * 5
-        mars_dy = math.sin(phase * 0.71) * 4
+        saturn_dx = math.sin(phase * 0.92) * 7
+        saturn_dy = math.cos(phase * 0.68) * 5
+        mars_dx = math.cos(phase * 0.76) * 6
+        mars_dy = math.sin(phase * 0.98) * 5
         moon_angle = phase * 0.95
         moon_orbit_x = math.cos(moon_angle) * 24
         moon_orbit_y = math.sin(moon_angle) * 16
@@ -558,7 +573,7 @@ class PortalWindow(QWidget):
         painter.drawEllipse(moon_rect.adjusted(5, 6, -4, -3))
 
         for star in self._stars:
-            twinkle = (math.sin((self._space_phase * star["speed"]) + star["phase"]) + 1.0) / 2.0
+            twinkle = 0.55 + (0.45 * abs(math.sin((self._space_phase * star["speed"]) + star["phase"])))
             self._draw_star(painter, star["x"], star["y"], star["r"], twinkle)
 
         painter.setBrush(QColor("#38D1FF"))
