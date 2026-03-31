@@ -25,31 +25,54 @@ try:
 except Exception:
     run_qt_portal = None
 try:
-    from PySide6.QtCore import QRectF, Qt
-    from PySide6.QtGui import QColor, QPainter
+    from PySide6.QtCore import QRectF, Qt, QTimer
+    from PySide6.QtGui import QColor, QLinearGradient, QPainter, QPainterPath, QPen, QRadialGradient
     from PySide6.QtWidgets import (
+        QAbstractItemView,
         QApplication,
+        QDialog,
+        QFileDialog,
         QFrame,
+        QGridLayout,
         QHBoxLayout,
+        QHeaderView,
         QLabel,
         QLineEdit,
+        QMessageBox,
         QPushButton,
+        QScrollArea,
         QSizePolicy,
+        QTableWidget,
+        QTableWidgetItem,
         QVBoxLayout,
         QWidget,
     )
 except Exception:
+    QAbstractItemView = None
     QApplication = None
+    QDialog = None
+    QFileDialog = None
     QRectF = None
     Qt = None
+    QTimer = None
     QColor = None
+    QLinearGradient = None
     QPainter = None
+    QPainterPath = None
+    QPen = None
+    QRadialGradient = None
     QFrame = None
+    QGridLayout = None
     QHBoxLayout = None
+    QHeaderView = None
     QLabel = None
     QLineEdit = None
+    QMessageBox = None
     QPushButton = None
+    QScrollArea = None
     QSizePolicy = None
+    QTableWidget = None
+    QTableWidgetItem = None
     QVBoxLayout = None
     QWidget = None
 from models import (
@@ -70,7 +93,8 @@ from models import (
     get_file_by_id,
     soft_delete_file,
     hard_delete_file,
-    get_detailed_analytics
+    get_detailed_analytics,
+    reset_student_analytics,
 )
 import re
 
@@ -1491,8 +1515,9 @@ class AsteroidMathGame:
             width=int(canvas_width * 0.95),
         )
 
-    # -------- Start Screen : Admin Login , Student Login , Guest Login , Footer With Credits --------
-
+    # -------- Start Screen : Splash screen, Admin Login , Student Login , Guest Login , Footer With Credits --------
+    
+# Splash screen with animated rocket and starfield, shown on app launch and when returning to start screen after visiting portals.
     def _cancel_splash_animation(self):
         if self.splash_animation_job is not None:
             try:
@@ -1547,7 +1572,7 @@ class AsteroidMathGame:
         self.canvas.create_line(x, y - sparkle, x, y + sparkle, fill="#FFFFFF", width=2)
         if sparkle >= 3:
             self.canvas.create_oval(x - 1, y - 1, x + 1, y + 1, fill="#FFFFFF", outline="")
-
+#Rocket drawing adapted from original by SynCraft Solution's lead designer, using a custom approach to create a playful, stylized rocket with a dynamic flame effect that scales with the animation progress.
     def _draw_splash_rocket(self, x, y, scale, flame_scale):
         body_w = int(46 * scale)
         body_h = int(112 * scale)
@@ -2023,12 +2048,22 @@ class AsteroidMathGame:
 
     def handle_admin_auth_success(self, user):
         if user["role"] == "admin":
-            show_admin_panel(
-            self.root,
-            user,
-            handle_logout=lambda: self.show_login_screen(),
-            handle_upload=self.upload_advanced_questions
-            )
+            if self.root.winfo_exists():
+                clear_root(self.root)
+            if callable(run_qt_admin_panel):
+                run_qt_admin_panel(
+                    self.root,
+                    user,
+                    handle_logout=lambda: self.show_login_screen(),
+                    handle_upload=self.upload_advanced_questions,
+                )
+            else:
+                show_admin_panel(
+                    self.root,
+                    user,
+                    handle_logout=lambda: self.show_login_screen(),
+                    handle_upload=self.upload_advanced_questions,
+                )
         else:
             messagebox.showerror(
             "Access Denied",
@@ -7383,6 +7418,7 @@ if QApplication is not None:
             self.password_visible = False
             self._stars = []
             self._starfield_size = None
+            self._space_phase = 0.0
 
             self.setWindowTitle(f"{heading_text} - Math Game")
             self.resize(1040, 640)
@@ -7519,6 +7555,9 @@ if QApplication is not None:
                 }
                 """
             )
+            self._space_timer = QTimer(self)
+            self._space_timer.timeout.connect(self._advance_space_scene)
+            self._space_timer.start(40)
             self._build_ui()
 
         def _build_ui(self):
@@ -7802,25 +7841,161 @@ if QApplication is not None:
                         "x": rng.randint(18, max(18, self.width() - 18)),
                         "y": rng.randint(18, max(18, self.height() - 18)),
                         "r": rng.choice((2, 2, 3)),
+                        "phase": rng.random() * math.pi * 2,
+                        "speed": rng.uniform(0.7, 1.5),
                     }
                 )
             self._stars = stars
             self._starfield_size = size_key
 
+        def _advance_space_scene(self):
+            self._space_phase = (self._space_phase + 0.045) % (math.pi * 2)
+            self.update()
+
         def paintEvent(self, event):
             self._ensure_stars()
             painter = QPainter(self)
             painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-            painter.fillRect(self.rect(), QColor("#120A25"))
+            painter.fillRect(self.rect(), QColor("#07111F"))
+
+            phase = self._space_phase
+            saturn_dx = math.sin(phase * 0.62) * 6
+            saturn_dy = math.cos(phase * 0.44) * 4
+            mars_dx = math.cos(phase * 0.48) * 5
+            mars_dy = math.sin(phase * 0.71) * 4
+            moon_angle = phase * 0.95
+            moon_orbit_x = math.cos(moon_angle) * 24
+            moon_orbit_y = math.sin(moon_angle) * 16
 
             painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor("#2B1762"))
-            painter.drawEllipse(QRectF(140, 34, 420, 280))
-            painter.setBrush(QColor("#183C80"))
-            painter.drawEllipse(QRectF(self.width() - 380, 90, 300, 220))
+
+            nebula_left = QRadialGradient(self.width() * 0.26, self.height() * 0.24, 260)
+            nebula_left.setColorAt(0.0, QColor(56, 209, 255, 55))
+            nebula_left.setColorAt(0.45, QColor(43, 23, 98, 110))
+            nebula_left.setColorAt(1.0, QColor(0, 0, 0, 0))
+            painter.setBrush(nebula_left)
+            painter.drawEllipse(QRectF(40, -10, 520, 360))
+
+            nebula_right = QRadialGradient(self.width() * 0.82, self.height() * 0.28, 210)
+            nebula_right.setColorAt(0.0, QColor(46, 124, 255, 70))
+            nebula_right.setColorAt(0.5, QColor(20, 60, 128, 90))
+            nebula_right.setColorAt(1.0, QColor(0, 0, 0, 0))
+            painter.setBrush(nebula_right)
+            painter.drawEllipse(QRectF(self.width() - 360, 40, 300, 240))
+
+            orbit_pen = QPen(QColor(56, 209, 255, 48))
+            orbit_pen.setWidth(2)
+            orbit_pen.setStyle(Qt.PenStyle.DashLine)
+            painter.setPen(orbit_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(QRectF(86 + saturn_dx, 136 + saturn_dy, 330, 112))
+
+            painter.setPen(Qt.PenStyle.NoPen)
+
+            saturn = QRadialGradient(256 + saturn_dx, 160 + saturn_dy, 140, 212 + saturn_dx, 124 + saturn_dy)
+            saturn.setColorAt(0.0, QColor("#FFF4CF"))
+            saturn.setColorAt(0.34, QColor("#E3C97D"))
+            saturn.setColorAt(0.68, QColor("#BA9350"))
+            saturn.setColorAt(1.0, QColor("#7A5428"))
+            painter.setBrush(saturn)
+            painter.drawEllipse(QRectF(120 + saturn_dx, 58 + saturn_dy, 250, 250))
+
+            painter.setBrush(QColor(255, 255, 255, 42))
+            painter.drawEllipse(QRectF(182 + saturn_dx, 96 + saturn_dy, 62, 50))
+
+            painter.setBrush(QColor(129, 95, 44, 120))
+            for rect in (
+                QRectF(150 + saturn_dx, 128 + saturn_dy, 178, 26),
+                QRectF(166 + saturn_dx, 168 + saturn_dy, 150, 24),
+                QRectF(146 + saturn_dx, 206 + saturn_dy, 164, 22),
+                QRectF(188 + saturn_dx, 238 + saturn_dy, 112, 18),
+            ):
+                painter.drawEllipse(rect)
+
+            ring_pen_back = QPen(QColor(255, 255, 255, 58))
+            ring_pen_back.setWidth(10)
+            painter.setPen(ring_pen_back)
+            painter.drawArc(QRectF(86 + saturn_dx, 136 + saturn_dy, 330, 112), 18 * 16, 144 * 16)
+
+            mars = QRadialGradient(
+                self.width() - 180 + mars_dx,
+                166 + mars_dy,
+                94,
+                self.width() - 198 + mars_dx,
+                144 + mars_dy,
+            )
+            mars.setColorAt(0.0, QColor("#FFD2A8"))
+            mars.setColorAt(0.34, QColor("#E6935E"))
+            mars.setColorAt(0.72, QColor("#B85633"))
+            mars.setColorAt(1.0, QColor("#742A17"))
+            painter.setBrush(mars)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QRectF(self.width() - 256 + mars_dx, 92 + mars_dy, 156, 156))
+
+            painter.setBrush(QColor(255, 255, 255, 34))
+            painter.drawEllipse(QRectF(self.width() - 214 + mars_dx, 118 + mars_dy, 42, 32))
+
+            painter.setBrush(QColor(126, 48, 27, 110))
+            for rect in (
+                QRectF(self.width() - 230 + mars_dx, 138 + mars_dy, 28, 22),
+                QRectF(self.width() - 178 + mars_dx, 178 + mars_dy, 34, 28),
+                QRectF(self.width() - 148 + mars_dx, 132 + mars_dy, 22, 18),
+                QRectF(self.width() - 216 + mars_dx, 206 + mars_dy, 18, 14),
+            ):
+                painter.drawEllipse(rect)
+
+            ring_pen_front = QPen(QColor("#59DAFF"))
+            ring_pen_front.setWidth(4)
+            painter.setPen(ring_pen_front)
+            painter.drawArc(QRectF(86 + saturn_dx, 136 + saturn_dy, 330, 112), 198 * 16, 158 * 16)
+
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(255, 138, 43, 44))
+            painter.drawEllipse(QRectF(self.width() - 228 + mars_dx, self.height() - 152 + mars_dy, 132, 102))
+
+            moon_rect = QRectF(
+                self.width() - 178 + mars_dx + moon_orbit_x,
+                162 + mars_dy + moon_orbit_y,
+                22,
+                22,
+            )
+            painter.setBrush(QColor(255, 255, 255, 38))
+            painter.drawEllipse(moon_rect.adjusted(-4, -4, 4, 4))
+            painter.setPen(QPen(QColor("#CFEFFF"), 1))
+            painter.setBrush(QColor("#EAF6FF"))
+            painter.drawEllipse(moon_rect)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(170, 190, 210, 120))
+            painter.drawEllipse(moon_rect.adjusted(5, 6, -4, -3))
+
+            painter.setBrush(QColor("#38D1FF"))
+            for x, y, r in (
+                (92, 82, 2),
+                (132, 44, 3),
+                (self.width() - 124, 74, 2),
+                (self.width() - 82, 132, 3),
+                (self.width() - 142, self.height() - 96, 2),
+            ):
+                painter.drawEllipse(QRectF(x, y, r * 2, r * 2))
 
             for star in self._stars:
-                painter.setBrush(QColor("#FFFFFF"))
+                twinkle = (math.sin((self._space_phase * star["speed"]) + star["phase"]) + 1.0) / 2.0
+                glow_radius = star["r"] * (2.4 + (twinkle * 0.9))
+                glow_alpha = int(28 + (twinkle * 54))
+                core_alpha = int(170 + (twinkle * 85))
+
+                painter.setPen(Qt.PenStyle.NoPen)
+                painter.setBrush(QColor(56, 209, 255, glow_alpha))
+                painter.drawEllipse(
+                    QRectF(
+                        star["x"] - glow_radius,
+                        star["y"] - glow_radius,
+                        glow_radius * 2,
+                        glow_radius * 2,
+                    )
+                )
+
+                painter.setBrush(QColor(255, 255, 255, core_alpha))
                 painter.drawEllipse(
                     QRectF(
                         star["x"] - star["r"],
@@ -7859,6 +8034,1930 @@ if QApplication is not None:
         }
 else:
     run_qt_login = None
+
+
+QT_ADMIN_PANEL_STYLES = """
+QWidget {
+    color: #F4F7FF;
+    font-family: 'Exo 2';
+    font-size: 13px;
+}
+QWidget#dashboardRoot {
+    background: transparent;
+}
+QFrame#shell {
+    background: rgba(7, 17, 31, 0.95);
+    border: 1px solid rgba(56, 209, 255, 0.16);
+    border-radius: 30px;
+}
+QFrame#sidebar {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+        stop:0 rgba(8, 19, 33, 0.99),
+        stop:0.55 rgba(13, 34, 56, 0.99),
+        stop:1 rgba(7, 17, 31, 0.99));
+    border: 1px solid rgba(56, 209, 255, 0.18);
+    border-radius: 24px;
+}
+QFrame#topCard, QFrame#heroCard, QFrame#moduleCard, QFrame#railCard, QFrame#metricCard {
+    background: rgba(14, 27, 45, 0.94);
+    border: 1px solid rgba(41, 81, 113, 0.56);
+    border-radius: 24px;
+}
+QFrame#heroCard {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 rgba(12, 33, 56, 0.98),
+        stop:0.55 rgba(14, 27, 45, 0.98),
+        stop:1 rgba(8, 19, 33, 0.98));
+}
+QFrame#mapCard {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
+        stop:0 rgba(8, 19, 33, 0.98),
+        stop:1 rgba(13, 34, 56, 0.98));
+    border: 1px solid rgba(56, 209, 255, 0.16);
+    border-radius: 24px;
+}
+QLabel#brandTitle {
+    font: 800 22px 'Rajdhani';
+    color: #FFFFFF;
+}
+QLabel#brandSub {
+    color: #9CC9E8;
+    font: 600 11px 'Exo 2';
+}
+QPushButton#navPrimary, QPushButton#navSecondary, QPushButton#navDanger {
+    text-align: left;
+    padding: 12px 16px;
+    border-radius: 16px;
+    font: 700 12px 'Rajdhani';
+}
+QPushButton#navPrimary {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2E7CFF, stop:1 #38D1FF);
+    color: #07111F;
+    border: none;
+}
+QPushButton#navPrimary:hover {
+    background: #55D9FF;
+}
+QPushButton#navSecondary {
+    background: rgba(255, 255, 255, 0.04);
+    color: #DDE4FF;
+    border: 1px solid rgba(56, 209, 255, 0.10);
+}
+QPushButton#navSecondary:hover {
+    background: rgba(56, 209, 255, 0.10);
+}
+QPushButton#navDanger {
+    background: rgba(255, 138, 43, 0.15);
+    color: #FFE6D0;
+    border: 1px solid rgba(255, 138, 43, 0.28);
+}
+QPushButton#navDanger:hover {
+    background: rgba(255, 138, 43, 0.24);
+}
+QLabel#eyebrow {
+    color: #D6F6FF;
+    background: rgba(56, 209, 255, 0.14);
+    border: 1px solid rgba(56, 209, 255, 0.22);
+    border-radius: 12px;
+    padding: 6px 12px;
+    font: 700 11px 'Rajdhani';
+}
+QLabel#titleLarge {
+    color: #FFFFFF;
+    font: 800 34px 'Rajdhani';
+}
+QLabel#heroTitle {
+    color: #FFFFFF;
+    font: 800 28px 'Rajdhani';
+}
+QLabel#heroBody, QLabel#bodyMuted, QLabel#activityText, QLabel#sectionBody {
+    color: #A9CAE5;
+    font: 500 12px 'Exo 2';
+}
+QLabel#metricLabel {
+    color: #80CFFF;
+    font: 700 11px 'Rajdhani';
+}
+QLabel#metricValue {
+    color: #FFFFFF;
+    font: 800 24px 'Rajdhani';
+}
+QLabel#sectionTitle {
+    color: #FFFFFF;
+    font: 800 18px 'Rajdhani';
+}
+QLabel#fieldLabel {
+    color: #DDE4FF;
+    font: 700 11px 'Rajdhani';
+}
+QLabel#settingsKey {
+    color: #80CFFF;
+    font: 700 11px 'Rajdhani';
+}
+QLabel#settingsValue {
+    color: #FFFFFF;
+    font: 700 13px 'Exo 2';
+}
+QLineEdit {
+    background: rgba(255, 255, 255, 0.04);
+    color: #F4F7FF;
+    border: 1px solid rgba(56, 209, 255, 0.14);
+    border-radius: 14px;
+    padding: 12px 14px;
+    selection-background-color: #2E7CFF;
+}
+QLineEdit:focus {
+    border: 1px solid rgba(56, 209, 255, 0.56);
+}
+QPushButton#primaryAction, QPushButton#secondaryAction, QPushButton#ghostAction, QPushButton#dangerAction {
+    border-radius: 16px;
+    padding: 11px 16px;
+    font: 700 12px 'Rajdhani';
+}
+QPushButton#primaryAction {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2E7CFF, stop:1 #38D1FF);
+    color: #07111F;
+    border: none;
+}
+QPushButton#primaryAction:hover {
+    background: #55D9FF;
+}
+QPushButton#secondaryAction {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #FFB05D, stop:1 #FF8A2B);
+    color: #07111F;
+    border: none;
+}
+QPushButton#secondaryAction:hover {
+    background: #FFC57F;
+}
+QPushButton#ghostAction {
+    background: rgba(255, 255, 255, 0.04);
+    color: #E3E8FF;
+    border: 1px solid rgba(56, 209, 255, 0.10);
+}
+QPushButton#ghostAction:hover {
+    background: rgba(56, 209, 255, 0.10);
+}
+QPushButton#dangerAction {
+    background: rgba(255, 138, 43, 0.14);
+    color: #FFE7D1;
+    border: 1px solid rgba(255, 138, 43, 0.20);
+}
+QPushButton#dangerAction:hover {
+    background: rgba(255, 138, 43, 0.24);
+}
+QTableWidget {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(56, 209, 255, 0.10);
+    border-radius: 16px;
+    gridline-color: rgba(56, 209, 255, 0.08);
+    selection-background-color: rgba(46, 124, 255, 0.35);
+    selection-color: #FFFFFF;
+}
+QHeaderView::section {
+    background: rgba(255, 255, 255, 0.05);
+    color: #DDE4FF;
+    border: none;
+    border-bottom: 1px solid rgba(56, 209, 255, 0.12);
+    padding: 10px;
+    font: 700 11px 'Rajdhani';
+}
+QScrollArea {
+    border: none;
+    background: transparent;
+}
+"""
+
+
+def _format_qt_admin_attempt_time(raw_value):
+    if not raw_value:
+        return "-"
+    if hasattr(raw_value, "strftime"):
+        return raw_value.strftime("%Y-%m-%d %H:%M:%S")
+    return str(raw_value).replace("T", " ")[:19]
+
+
+def _normalize_qt_admin_student_row(row):
+    if isinstance(row, dict) or hasattr(row, "keys"):
+        row_data = dict(row)
+        return {
+            "id": row_data.get("id"),
+            "name": row_data.get("name"),
+            "grade": row_data.get("grade"),
+            "batch": row_data.get("batch"),
+            "enrollment_id": row_data.get("enrollment_id"),
+            "login_id": row_data.get("login_id"),
+        }
+
+    sid, name, grade, batch, enrollment_id, login_id = row
+    return {
+        "id": sid,
+        "name": name,
+        "grade": grade,
+        "batch": batch,
+        "enrollment_id": enrollment_id,
+        "login_id": login_id,
+    }
+
+
+def _qt_admin_table_item(value, alignment=None):
+    item = QTableWidgetItem("" if value is None else str(value))
+    item.setFlags(item.flags() ^ Qt.ItemFlag.ItemIsEditable)
+    if alignment is not None:
+        item.setTextAlignment(alignment)
+    return item
+
+
+if QApplication is not None:
+    class _QtAdminBaseDialog(QDialog):
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setStyleSheet(QT_ADMIN_PANEL_STYLES)
+            self.setModal(True)
+
+        def _info(self, title, message):
+            QMessageBox.information(self, title, message)
+
+        def _error(self, title, message):
+            QMessageBox.critical(self, title, message)
+
+        def _confirm(self, title, message):
+            return QMessageBox.question(self, title, message) == QMessageBox.StandardButton.Yes
+
+
+    class QtRocketWidget(QWidget):
+        def __init__(self, parent=None):
+            super().__init__(parent)
+            self.setMinimumSize(290, 250)
+
+        def paintEvent(self, event):
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.fillRect(self.rect(), QColor(0, 0, 0, 0))
+
+            painter.setPen(Qt.PenStyle.NoPen)
+
+            panel_gradient = QLinearGradient(0, 0, self.width(), self.height())
+            panel_gradient.setColorAt(0.0, QColor(9, 28, 49, 180))
+            panel_gradient.setColorAt(0.55, QColor(15, 40, 66, 135))
+            panel_gradient.setColorAt(1.0, QColor(7, 17, 31, 40))
+            painter.setBrush(panel_gradient)
+            painter.drawRoundedRect(self.rect().adjusted(10, 10, -10, -10), 26, 26)
+
+            glow = QRadialGradient(self.width() * 0.60, self.height() * 0.44, self.width() * 0.34)
+            glow.setColorAt(0.0, QColor(56, 209, 255, 105))
+            glow.setColorAt(0.55, QColor(46, 124, 255, 42))
+            glow.setColorAt(1.0, QColor(0, 0, 0, 0))
+            painter.setBrush(glow)
+            painter.drawEllipse(QRectF(self.width() * 0.24, self.height() * 0.08, self.width() * 0.62, self.height() * 0.68))
+
+            orbit_pen = QPen(QColor(56, 209, 255, 95))
+            orbit_pen.setWidth(2)
+            orbit_pen.setStyle(Qt.PenStyle.DashLine)
+            painter.setPen(orbit_pen)
+            painter.setBrush(Qt.BrushStyle.NoBrush)
+            painter.drawEllipse(QRectF(34, 26, self.width() - 82, self.height() - 72))
+            painter.drawArc(QRectF(78, 46, self.width() - 150, self.height() - 112), 20 * 16, 220 * 16)
+
+            painter.setPen(Qt.PenStyle.NoPen)
+            for x, y, r, color in (
+                (32, 42, 3, "#38D1FF"),
+                (58, 86, 2, "#FFFFFF"),
+                (self.width() - 72, 50, 4, "#FF8A2B"),
+                (self.width() - 40, 98, 2, "#38D1FF"),
+                (74, self.height() - 42, 3, "#FFFFFF"),
+                (self.width() - 94, self.height() - 52, 3, "#38D1FF"),
+            ):
+                painter.setBrush(QColor(color))
+                painter.drawEllipse(QRectF(x, y, r * 2, r * 2))
+
+            for x0, y0, x1, y1 in (
+                (28, 166, 96, 144),
+                (42, 188, 124, 162),
+                (58, 208, 142, 182),
+            ):
+                streak_pen = QPen(QColor(56, 209, 255, 42))
+                streak_pen.setWidth(3)
+                painter.setPen(streak_pen)
+                painter.drawLine(x0, y0, x1, y1)
+
+            painter.save()
+            painter.translate(self.width() * 0.54, self.height() * 0.54)
+            painter.rotate(-25)
+
+            exhaust_glow = QRadialGradient(-82, 0, 52)
+            exhaust_glow.setColorAt(0.0, QColor(255, 176, 93, 160))
+            exhaust_glow.setColorAt(0.6, QColor(255, 138, 43, 70))
+            exhaust_glow.setColorAt(1.0, QColor(0, 0, 0, 0))
+            painter.setBrush(exhaust_glow)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QRectF(-132, -52, 108, 104))
+
+            flame_outer = QPainterPath()
+            flame_outer.moveTo(-84, 0)
+            flame_outer.cubicTo(-138, -18, -144, -54, -96, -42)
+            flame_outer.cubicTo(-125, -10, -126, 10, -96, 42)
+            flame_outer.cubicTo(-144, 54, -138, 18, -84, 0)
+            flame_gradient = QLinearGradient(-132, 0, -56, 0)
+            flame_gradient.setColorAt(0.0, QColor("#FF8A2B"))
+            flame_gradient.setColorAt(0.55, QColor("#FFB05D"))
+            flame_gradient.setColorAt(1.0, QColor("#FFF1B8"))
+            painter.fillPath(flame_outer, flame_gradient)
+
+            flame_inner = QPainterPath()
+            flame_inner.moveTo(-74, 0)
+            flame_inner.cubicTo(-112, -10, -112, -28, -80, -20)
+            flame_inner.cubicTo(-96, -6, -96, 6, -80, 20)
+            flame_inner.cubicTo(-112, 28, -112, 10, -74, 0)
+            painter.fillPath(flame_inner, QColor("#FFF6D6"))
+
+            fin_back = QPainterPath()
+            fin_back.moveTo(-14, -10)
+            fin_back.lineTo(-54, -66)
+            fin_back.lineTo(-2, -40)
+            fin_back.closeSubpath()
+            fin_back_gradient = QLinearGradient(-54, -66, 4, -10)
+            fin_back_gradient.setColorAt(0.0, QColor("#1A5FDB"))
+            fin_back_gradient.setColorAt(1.0, QColor("#38D1FF"))
+            painter.fillPath(fin_back, fin_back_gradient)
+
+            fin_front = QPainterPath()
+            fin_front.moveTo(-14, 10)
+            fin_front.lineTo(-58, 68)
+            fin_front.lineTo(2, 38)
+            fin_front.closeSubpath()
+            fin_front_gradient = QLinearGradient(-58, 68, 10, 12)
+            fin_front_gradient.setColorAt(0.0, QColor("#FF8A2B"))
+            fin_front_gradient.setColorAt(1.0, QColor("#FFD08A"))
+            painter.fillPath(fin_front, fin_front_gradient)
+
+            body = QPainterPath()
+            body.moveTo(-48, 0)
+            body.cubicTo(-18, -58, 58, -56, 96, 0)
+            body.cubicTo(58, 56, -18, 58, -48, 0)
+            body_gradient = QLinearGradient(-50, -44, 92, 44)
+            body_gradient.setColorAt(0.0, QColor("#FDFEFF"))
+            body_gradient.setColorAt(0.38, QColor("#EAF6FF"))
+            body_gradient.setColorAt(1.0, QColor("#BFD6E8"))
+            painter.fillPath(body, body_gradient)
+
+            shadow_pen = QPen(QColor(17, 45, 78, 70))
+            shadow_pen.setWidth(2)
+            painter.setPen(shadow_pen)
+            painter.drawPath(body)
+
+            stripe = QPainterPath()
+            stripe.moveTo(-2, -22)
+            stripe.cubicTo(16, -18, 38, -10, 52, 0)
+            stripe.cubicTo(38, 10, 16, 18, -2, 22)
+            stripe.cubicTo(6, 10, 6, -10, -2, -22)
+            painter.fillPath(stripe, QColor(46, 124, 255, 210))
+
+            nose = QPainterPath()
+            nose.moveTo(56, -18)
+            nose.cubicTo(80, -14, 94, -7, 102, 0)
+            nose.cubicTo(94, 7, 80, 14, 56, 18)
+            nose.cubicTo(66, 8, 66, -8, 56, -18)
+            painter.fillPath(nose, QColor("#FF8A2B"))
+
+            cockpit_outer = QRadialGradient(18, 0, 28)
+            cockpit_outer.setColorAt(0.0, QColor("#DDF7FF"))
+            cockpit_outer.setColorAt(0.45, QColor("#73C9FF"))
+            cockpit_outer.setColorAt(1.0, QColor("#1445A6"))
+            painter.setBrush(cockpit_outer)
+            painter.setPen(QPen(QColor("#EAF6FF"), 2))
+            painter.drawEllipse(QRectF(-4, -20, 38, 40))
+
+            painter.setBrush(QColor(255, 255, 255, 120))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.drawEllipse(QRectF(2, -16, 12, 10))
+
+            nozzle = QPainterPath()
+            nozzle.moveTo(-52, -10)
+            nozzle.lineTo(-68, -14)
+            nozzle.lineTo(-68, 14)
+            nozzle.lineTo(-52, 10)
+            nozzle.closeSubpath()
+            painter.fillPath(nozzle, QColor("#2A4259"))
+
+            wing = QPainterPath()
+            wing.moveTo(6, 18)
+            wing.lineTo(56, 56)
+            wing.lineTo(22, 4)
+            wing.closeSubpath()
+            wing_gradient = QLinearGradient(8, 14, 56, 56)
+            wing_gradient.setColorAt(0.0, QColor("#2E7CFF"))
+            wing_gradient.setColorAt(1.0, QColor("#38D1FF"))
+            painter.fillPath(wing, wing_gradient)
+
+            painter.restore()
+
+
+    class QtStudentManagerDialog(_QtAdminBaseDialog):
+        def __init__(self, on_data_changed, parent=None):
+            super().__init__(parent)
+            self.on_data_changed = on_data_changed
+            self.students_cache = []
+            self.selected_student_id = None
+            self.setWindowTitle("Manage Students")
+            self.resize(1120, 650)
+            self._build_ui()
+            self.reload_students()
+
+        def _build_ui(self):
+            root = QVBoxLayout(self)
+            root.setContentsMargins(24, 24, 24, 24)
+            root.setSpacing(18)
+
+            title = QLabel("Manage Students")
+            title.setObjectName("sectionTitle")
+            root.addWidget(title)
+
+            subtitle = QLabel("Select a student, update details, or delete the account.")
+            subtitle.setObjectName("sectionBody")
+            root.addWidget(subtitle)
+
+            content = QHBoxLayout()
+            content.setSpacing(18)
+            root.addLayout(content, 1)
+
+            table_card = QFrame()
+            table_card.setObjectName("moduleCard")
+            table_layout = QVBoxLayout(table_card)
+            table_layout.setContentsMargins(18, 18, 18, 18)
+            table_layout.setSpacing(12)
+
+            self.table = QTableWidget(0, 5)
+            self.table.setHorizontalHeaderLabels(["Student", "Std", "Batch", "Roll", "Login ID"])
+            self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+            self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+            self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            self.table.verticalHeader().setVisible(False)
+            self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            for index in range(1, 5):
+                self.table.horizontalHeader().setSectionResizeMode(index, QHeaderView.ResizeMode.ResizeToContents)
+            self.table.itemSelectionChanged.connect(self._load_selected_student)
+            table_layout.addWidget(self.table)
+            content.addWidget(table_card, 11)
+
+            form_card = QFrame()
+            form_card.setObjectName("moduleCard")
+            form_layout = QVBoxLayout(form_card)
+            form_layout.setContentsMargins(18, 18, 18, 18)
+            form_layout.setSpacing(12)
+
+            form_title = QLabel("Student Details")
+            form_title.setObjectName("sectionTitle")
+            form_layout.addWidget(form_title)
+
+            self.name_edit = self._create_field(form_layout, "Student Name")
+            self.grade_edit = self._create_field(form_layout, "Standard (1-10)")
+            self.batch_edit = self._create_field(form_layout, "Batch")
+            self.enroll_edit = self._create_field(form_layout, "Enrollment/Roll No")
+
+            self.login_label = QLabel("Login ID: -")
+            self.login_label.setObjectName("bodyMuted")
+            form_layout.addWidget(self.login_label)
+            form_layout.addStretch(1)
+
+            actions = QHBoxLayout()
+            actions.setSpacing(10)
+            for text, object_name, callback in (
+                ("Save Changes", "primaryAction", self.save_student_changes),
+                ("Delete Student", "dangerAction", self.delete_selected_student),
+                ("Close", "ghostAction", self.accept),
+            ):
+                button = QPushButton(text)
+                button.setObjectName(object_name)
+                button.setCursor(Qt.CursorShape.PointingHandCursor)
+                button.clicked.connect(callback)
+                actions.addWidget(button)
+            form_layout.addLayout(actions)
+            content.addWidget(form_card, 9)
+
+        def _create_field(self, layout, label_text):
+            label = QLabel(label_text)
+            label.setObjectName("fieldLabel")
+            layout.addWidget(label)
+            edit = QLineEdit()
+            layout.addWidget(edit)
+            return edit
+
+        def _selected_student(self):
+            if self.selected_student_id is None:
+                return None
+            for student in self.students_cache:
+                if student["id"] == self.selected_student_id:
+                    return student
+            return None
+
+        def _load_selected_student(self):
+            row = self.table.currentRow()
+            if row < 0 or row >= len(self.students_cache):
+                self.selected_student_id = None
+                return
+
+            student = self.students_cache[row]
+            self.selected_student_id = student["id"]
+            self.name_edit.setText(student.get("name") or "")
+            self.grade_edit.setText("" if student.get("grade") is None else str(student.get("grade")))
+            self.batch_edit.setText(student.get("batch") or "")
+            enroll = student.get("enrollment_id")
+            self.enroll_edit.setText("" if enroll is None else str(enroll))
+            self.login_label.setText(f"Login ID: {student.get('login_id') or '-'}")
+
+        def reload_students(self, selected_id=None):
+            try:
+                raw_students = get_all_students()
+            except Exception as exc:
+                self._error("Error", f"Failed to load students.\n{exc}")
+                return
+
+            self.students_cache = [_normalize_qt_admin_student_row(row) for row in raw_students]
+            self.table.setRowCount(len(self.students_cache))
+
+            for row_index, student in enumerate(self.students_cache):
+                values = [
+                    student.get("name") or "-",
+                    student.get("grade") if student.get("grade") is not None else "-",
+                    student.get("batch") or "-",
+                    student.get("enrollment_id") if student.get("enrollment_id") is not None else "-",
+                    student.get("login_id") or "-",
+                ]
+                for col_index, value in enumerate(values):
+                    alignment = Qt.AlignmentFlag.AlignCenter if col_index > 0 else Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+                    self.table.setItem(row_index, col_index, _qt_admin_table_item(value, int(alignment)))
+
+            if not self.students_cache:
+                self.selected_student_id = None
+                self.name_edit.clear()
+                self.grade_edit.clear()
+                self.batch_edit.clear()
+                self.enroll_edit.clear()
+                self.login_label.setText("Login ID: -")
+                return
+
+            index_to_select = 0
+            if selected_id:
+                for index, student in enumerate(self.students_cache):
+                    if student["id"] == selected_id:
+                        index_to_select = index
+                        break
+
+            self.table.selectRow(index_to_select)
+            self._load_selected_student()
+
+        def save_student_changes(self):
+            student = self._selected_student()
+            if not student:
+                self._error("Validation Error", "Select a student first.")
+                return
+
+            name = self.name_edit.text().strip()
+            grade_text = self.grade_edit.text().strip()
+            batch = self.batch_edit.text().strip()
+            enrollment_text = self.enroll_edit.text().strip()
+
+            errors = []
+            if not name:
+                errors.append("Student name is required.")
+            elif len(name) > MAX_STUDENT_NAME_LENGTH:
+                errors.append(f"Student name cannot exceed {MAX_STUDENT_NAME_LENGTH} characters.")
+            elif not STUDENT_NAME_PATTERN.fullmatch(name):
+                errors.append("Student name can contain only letters, spaces, apostrophe ('), dot (.) and hyphen (-).")
+
+            if not grade_text:
+                errors.append("Standard is required.")
+            elif not grade_text.isdigit() or not (1 <= int(grade_text) <= 10):
+                errors.append("Standard must be between 1 and 10.")
+
+            if batch:
+                if len(batch) > MAX_BATCH_LENGTH:
+                    errors.append(f"Batch cannot exceed {MAX_BATCH_LENGTH} characters.")
+                elif not BATCH_PATTERN.fullmatch(batch):
+                    errors.append("Batch can contain only letters, numbers, spaces, slash (/), hyphen (-) and underscore (_).")
+
+            if enrollment_text and not enrollment_text.isdigit():
+                errors.append("Enrollment/Roll number must be numeric.")
+
+            if errors:
+                self._error("Validation Error", "\n".join(errors))
+                return
+
+            try:
+                updated = update_student_details(
+                    student["id"],
+                    name=name,
+                    grade=int(grade_text),
+                    batch=batch,
+                    enrollment_id=int(enrollment_text) if enrollment_text else student["enrollment_id"],
+                )
+            except Exception as exc:
+                self._error("Error", f"Failed to update student.\n{exc}")
+                return
+
+            if not updated:
+                self._error("Error", "Student not found or update failed.")
+                return
+
+            self._info("Updated", "Student details updated.")
+            if callable(self.on_data_changed):
+                self.on_data_changed()
+            self.reload_students(selected_id=student["id"])
+
+        def delete_selected_student(self):
+            student = self._selected_student()
+            if not student:
+                self._error("Validation Error", "Select a student first.")
+                return
+
+            login_value = student.get("login_id") or "-"
+            enrollment_value = student.get("enrollment_id")
+            enrollment_value = enrollment_value if enrollment_value is not None else "-"
+            confirmed = self._confirm(
+                "Confirm Delete",
+                (
+                    "Delete this student account?\n\n"
+                    f"Name: {student['name']}\n"
+                    f"Standard: {student['grade']}\n"
+                    f"Batch: {student['batch'] or '-'}\n"
+                    f"Enrollment/Roll: {enrollment_value}\n"
+                    f"Login ID: {login_value}\n\n"
+                    "This will also delete the student's login and attempts data."
+                ),
+            )
+            if not confirmed:
+                return
+
+            try:
+                deleted = delete_student_account(student["id"])
+            except Exception as exc:
+                self._error("Error", f"Failed to delete student.\n{exc}")
+                return
+
+            if not deleted:
+                self._error("Error", "Student not found or already deleted.")
+                self.reload_students()
+                return
+
+            self._info("Deleted", "Student account deleted successfully.")
+            if callable(self.on_data_changed):
+                self.on_data_changed()
+            self.reload_students()
+
+
+    class QtAnalyticsDialog(_QtAdminBaseDialog):
+        def __init__(self, student_data, on_reset=None, parent=None):
+            super().__init__(parent)
+            self.student_data = student_data
+            self.on_reset = on_reset
+            self.analytics = []
+            self.setWindowTitle(f"Analytics: {student_data.get('name', 'Student')}")
+            self.resize(980, 620)
+            self._build_ui()
+            self.reload_analytics()
+
+        def _build_ui(self):
+            root = QVBoxLayout(self)
+            root.setContentsMargins(24, 24, 24, 24)
+            root.setSpacing(16)
+
+            heading = QLabel(self.student_data.get("name") or "Student")
+            heading.setObjectName("sectionTitle")
+            root.addWidget(heading)
+
+            meta = self.student_data.get("login_id") or "No login id"
+            sub = QLabel(f"Detailed attempts and mastery history for {meta}.")
+            sub.setObjectName("sectionBody")
+            root.addWidget(sub)
+
+            self.summary = QLabel("")
+            self.summary.setObjectName("bodyMuted")
+            root.addWidget(self.summary)
+
+            self.table = QTableWidget(0, 8)
+            self.table.setHorizontalHeaderLabels(
+                ["Section", "Topic", "Level", "Score", "Total Q", "Accuracy", "Avg Speed", "Date"]
+            )
+            self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+            self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+            self.table.verticalHeader().setVisible(False)
+            self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+            self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+            for index in range(2, 8):
+                self.table.horizontalHeader().setSectionResizeMode(index, QHeaderView.ResizeMode.ResizeToContents)
+            root.addWidget(self.table, 1)
+
+            actions = QHBoxLayout()
+            actions.setSpacing(10)
+            for text, object_name, callback in (
+                ("Export CSV", "ghostAction", self.export_csv),
+                ("Reset Student Data", "dangerAction", self.reset_analytics),
+                ("Close", "primaryAction", self.accept),
+            ):
+                button = QPushButton(text)
+                button.setObjectName(object_name)
+                button.setCursor(Qt.CursorShape.PointingHandCursor)
+                button.clicked.connect(callback)
+                actions.addWidget(button)
+            root.addLayout(actions)
+
+        def reload_analytics(self):
+            student_id = self.student_data.get("id")
+            self.analytics = get_detailed_analytics(student_id) if student_id else []
+            self.table.setRowCount(len(self.analytics))
+
+            for row_index, entry in enumerate(self.analytics):
+                accuracy = float(entry.get("accuracy", 0.0) or 0.0)
+                values = [
+                    entry.get("section") or "-",
+                    entry.get("topic") or "-",
+                    entry.get("sub_level") or entry.get("level") or "-",
+                    entry.get("score") if entry.get("score") is not None else "-",
+                    entry.get("total_q") if entry.get("total_q") is not None else "-",
+                    f"{accuracy * 100:.0f}%",
+                    f"{float(entry.get('avg_speed') or 0):.2f}s",
+                    _format_qt_admin_attempt_time(entry.get("date")),
+                ]
+                for col_index, value in enumerate(values):
+                    alignment = Qt.AlignmentFlag.AlignCenter if col_index != 1 else Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+                    self.table.setItem(row_index, col_index, _qt_admin_table_item(value, int(alignment)))
+
+            self.summary.setText(f"Loaded {len(self.analytics)} recorded attempt(s).")
+
+        def export_csv(self):
+            if not self.analytics:
+                self._info("Export", "No analytics data available to export.")
+                return
+
+            safe_name = re.sub(r"[^A-Za-z0-9_-]+", "_", self.student_data.get("name", "student")).strip("_") or "student"
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Export Analytics CSV",
+                os.path.join(PROJECT_ROOT, f"{safe_name}_analytics.csv"),
+                "CSV Files (*.csv);;All Files (*.*)",
+            )
+            if not file_path:
+                return
+
+            try:
+                with open(file_path, "w", newline="", encoding="utf-8") as csv_file:
+                    writer = csv.writer(csv_file)
+                    writer.writerow(["Section", "Topic", "Level", "Score", "Total Q", "Accuracy", "Avg Speed", "Date"])
+                    for entry in self.analytics:
+                        writer.writerow(
+                            [
+                                entry.get("section") or "",
+                                entry.get("topic") or "",
+                                entry.get("sub_level") or entry.get("level") or "",
+                                entry.get("score") or 0,
+                                entry.get("total_q") or 0,
+                                f"{float(entry.get('accuracy') or 0) * 100:.2f}",
+                                f"{float(entry.get('avg_speed') or 0):.2f}",
+                                _format_qt_admin_attempt_time(entry.get("date")),
+                            ]
+                        )
+            except Exception as exc:
+                self._error("Export Error", f"Could not export CSV.\n{exc}")
+                return
+
+            self._info("Export Success", f"CSV exported to:\n{file_path}")
+
+        def reset_analytics(self):
+            student_id = self.student_data.get("id")
+            student_name = self.student_data.get("name", "this student")
+            if not student_id:
+                self._error("Reset Error", "Student record is missing an ID.")
+                return
+
+            if not self._confirm(
+                "Reset Analytics",
+                f"Delete all analytics attempts for {student_name}?\n\nThis cannot be undone.",
+            ):
+                return
+
+            try:
+                deleted_rows = reset_student_analytics(student_id)
+            except Exception as exc:
+                self._error("Reset Error", f"Could not reset analytics.\n{exc}")
+                return
+
+            self.reload_analytics()
+            if callable(self.on_reset):
+                self.on_reset()
+
+            if deleted_rows == 0:
+                self._info("Reset Complete", f"No analytics attempts were found for {student_name}.")
+            else:
+                self._info("Reset Complete", f"Deleted {deleted_rows} analytics attempt(s) for {student_name}.")
+
+
+    class QtProgressDialog(_QtAdminBaseDialog):
+        def __init__(self, on_data_changed, parent=None):
+            super().__init__(parent)
+            self.on_data_changed = on_data_changed
+            self.progress_rows = []
+            self.setWindowTitle("Student Progress")
+            self.resize(1260, 680)
+            self._build_ui()
+            self.load_progress()
+
+        def _build_ui(self):
+            root = QVBoxLayout(self)
+            root.setContentsMargins(24, 24, 24, 24)
+            root.setSpacing(16)
+
+            title = QLabel("Student Progress & Scores")
+            title.setObjectName("sectionTitle")
+            root.addWidget(title)
+
+            subtitle = QLabel("Track attempts, open analytics, and export reports as CSV or Excel.")
+            subtitle.setObjectName("sectionBody")
+            root.addWidget(subtitle)
+
+            self.status_label = QLabel("")
+            self.status_label.setObjectName("bodyMuted")
+            root.addWidget(self.status_label)
+
+            self.table = QTableWidget(0, 10)
+            self.table.setHorizontalHeaderLabels(
+                ["Student", "Std", "Batch", "Roll", "Login ID", "Attempts", "Avg Score", "Best", "Last", "Last Attempt"]
+            )
+            self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+            self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+            self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            self.table.verticalHeader().setVisible(False)
+            self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
+            for index in (1, 2, 3, 5, 6, 7, 8, 9):
+                self.table.horizontalHeader().setSectionResizeMode(index, QHeaderView.ResizeMode.ResizeToContents)
+            root.addWidget(self.table, 1)
+
+            actions = QHBoxLayout()
+            actions.setSpacing(10)
+            for text, object_name, callback in (
+                ("Refresh", "ghostAction", self.load_progress),
+                ("View Analytics", "primaryAction", self.view_student_analytics),
+                ("Export CSV", "ghostAction", self.export_csv),
+                ("Export Excel", "ghostAction", self.export_excel),
+                ("Close", "secondaryAction", self.accept),
+            ):
+                button = QPushButton(text)
+                button.setObjectName(object_name)
+                button.setCursor(Qt.CursorShape.PointingHandCursor)
+                button.clicked.connect(callback)
+                actions.addWidget(button)
+            root.addLayout(actions)
+
+        def _build_row_values(self, row, placeholder="-"):
+            attempts = int(row.get("attempts_count") or 0)
+            avg_score = float(row.get("avg_score") or 0)
+            best_score = int(row.get("best_score") or 0)
+            last_score_raw = row.get("last_score")
+            last_score = placeholder if last_score_raw is None else int(last_score_raw)
+            return [
+                row.get("name") or placeholder,
+                row.get("grade") if row.get("grade") is not None else placeholder,
+                row.get("batch") or placeholder,
+                row.get("enrollment_id") if row.get("enrollment_id") is not None else placeholder,
+                row.get("login_id") or placeholder,
+                attempts,
+                f"{avg_score:.2f}",
+                best_score,
+                last_score,
+                _format_qt_admin_attempt_time(row.get("last_attempt_at")),
+            ]
+
+        def load_progress(self):
+            try:
+                self.progress_rows = get_student_progress()
+            except Exception as exc:
+                self._error("Error", f"Failed to load progress.\n{exc}")
+                return
+
+            self.table.setRowCount(len(self.progress_rows))
+            for row_index, row in enumerate(self.progress_rows):
+                values = self._build_row_values(row, placeholder="-")
+                for col_index, value in enumerate(values):
+                    alignment = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter if col_index in (0, 4, 9) else Qt.AlignmentFlag.AlignCenter
+                    self.table.setItem(row_index, col_index, _qt_admin_table_item(value, int(alignment)))
+
+            self.status_label.setText(
+                "No student records found." if not self.progress_rows else f"Loaded {len(self.progress_rows)} student record(s)."
+            )
+
+        def _selected_row(self):
+            row_index = self.table.currentRow()
+            if row_index < 0 or row_index >= len(self.progress_rows):
+                return None
+            return self.progress_rows[row_index]
+
+        def view_student_analytics(self):
+            student_data = self._selected_row()
+            if not student_data:
+                self._error("No Selection", "Please select a student from the table.")
+                return
+
+            dialog = QtAnalyticsDialog(student_data, on_reset=self._after_analytics_reset, parent=self)
+            dialog.exec()
+
+        def _after_analytics_reset(self):
+            self.load_progress()
+            if callable(self.on_data_changed):
+                self.on_data_changed()
+
+        def export_csv(self):
+            if not self.progress_rows:
+                self._info("Export", "No student data available to export.")
+                return
+
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Export Student Progress (CSV)",
+                os.path.join(PROJECT_ROOT, "student_progress.csv"),
+                "CSV Files (*.csv);;All Files (*.*)",
+            )
+            if not file_path:
+                return
+
+            headers = ["Student", "Std", "Batch", "Roll", "Login ID", "Attempts", "Avg Score", "Best", "Last", "Last Attempt"]
+            try:
+                with open(file_path, "w", newline="", encoding="utf-8") as csv_file:
+                    writer = csv.writer(csv_file)
+                    writer.writerow(headers)
+                    for row in self.progress_rows:
+                        writer.writerow(self._build_row_values(row, placeholder=""))
+            except Exception as exc:
+                self._error("Export Error", f"Could not export CSV.\n{exc}")
+                return
+
+            self._info("Export Success", f"CSV exported to:\n{file_path}")
+
+        def export_excel(self):
+            if Workbook is None:
+                self._error("Missing Dependency", "Excel export requires openpyxl.\nInstall with: pip install openpyxl")
+                return
+
+            if not self.progress_rows:
+                self._info("Export", "No student data available to export.")
+                return
+
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "Export Student Progress (Excel)",
+                os.path.join(PROJECT_ROOT, "student_progress.xlsx"),
+                "Excel Files (*.xlsx);;All Files (*.*)",
+            )
+            if not file_path:
+                return
+
+            headers = ["Student", "Std", "Batch", "Roll", "Login ID", "Attempts", "Avg Score", "Best", "Last", "Last Attempt"]
+            try:
+                workbook = Workbook()
+                worksheet = workbook.active
+                worksheet.title = "Student Progress"
+                worksheet.append(headers)
+                for row in self.progress_rows:
+                    worksheet.append(self._build_row_values(row, placeholder=""))
+                worksheet.freeze_panes = "A2"
+                worksheet.auto_filter.ref = f"A1:J{len(self.progress_rows) + 1}"
+                workbook.save(file_path)
+            except Exception as exc:
+                self._error("Export Error", f"Could not export Excel.\n{exc}")
+                return
+
+            self._info("Export Success", f"Excel exported to:\n{file_path}")
+
+
+    class QtQuestionManagerDialog(_QtAdminBaseDialog):
+        def __init__(self, game=None, on_data_changed=None, parent=None):
+            super().__init__(parent)
+            self.game = game
+            self.on_data_changed = on_data_changed
+            self.db_files = []
+            self.setWindowTitle("Manage Advanced Question Files")
+            self.resize(980, 620)
+            self._build_ui()
+            self.refresh_files()
+
+        def _build_ui(self):
+            root = QVBoxLayout(self)
+            root.setContentsMargins(24, 24, 24, 24)
+            root.setSpacing(16)
+
+            title = QLabel("Manage Advanced Question Files")
+            title.setObjectName("sectionTitle")
+            root.addWidget(title)
+
+            subtitle = QLabel("Upload TXT files, choose the active quiz bank, or remove old question sets.")
+            subtitle.setObjectName("sectionBody")
+            subtitle.setWordWrap(True)
+            root.addWidget(subtitle)
+
+            self.status_label = QLabel("")
+            self.status_label.setObjectName("bodyMuted")
+            root.addWidget(self.status_label)
+
+            self.table = QTableWidget(0, 4)
+            self.table.setHorizontalHeaderLabels(["Filename", "Type", "Description", "Uploaded At"])
+            self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+            self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+            self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            self.table.verticalHeader().setVisible(False)
+            self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+            self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+            self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+            root.addWidget(self.table, 1)
+
+            actions = QHBoxLayout()
+            actions.setSpacing(10)
+            for text, object_name, callback in (
+                ("Use Selected", "primaryAction", self.use_selected_file),
+                ("Upload TXT...", "secondaryAction", self.upload_files),
+                ("Delete", "dangerAction", self.delete_selected_file),
+                ("Refresh", "ghostAction", self.refresh_files),
+                ("Close", "ghostAction", self.accept),
+            ):
+                button = QPushButton(text)
+                button.setObjectName(object_name)
+                button.setCursor(Qt.CursorShape.PointingHandCursor)
+                button.clicked.connect(callback)
+                actions.addWidget(button)
+            root.addLayout(actions)
+
+        def _selected_file(self):
+            row_index = self.table.currentRow()
+            if row_index < 0 or row_index >= len(self.db_files):
+                return None
+            return self.db_files[row_index]
+
+        def refresh_files(self):
+            try:
+                self.db_files = get_all_files()
+            except Exception as exc:
+                self.db_files = []
+                self.status_label.setText(f"Error loading files: {exc}")
+                self.table.setRowCount(0)
+                return
+
+            self.table.setRowCount(len(self.db_files))
+            for row_index, row in enumerate(self.db_files):
+                values = [
+                    row.get("filename") or row.get("id"),
+                    row.get("file_type") or "-",
+                    row.get("description") or "-",
+                    _format_qt_admin_attempt_time(row.get("uploaded_at")),
+                ]
+                for col_index, value in enumerate(values):
+                    alignment = Qt.AlignmentFlag.AlignCenter if col_index == 1 else Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+                    self.table.setItem(row_index, col_index, _qt_admin_table_item(value, int(alignment)))
+
+            if self.db_files:
+                self.status_label.setText(f"Loaded {len(self.db_files)} question bank(s).")
+            else:
+                self.status_label.setText("No uploaded files yet.")
+
+        def use_selected_file(self):
+            row = self._selected_file()
+            if not row:
+                self._error("Select File", "Please select a file from the list.")
+                return
+
+            try:
+                full_row = get_file_by_id(row["id"])
+                if not full_row:
+                    self._error("Error", "File not found in the database.")
+                    return
+
+                tmp_dir = os.path.join(PROJECT_ROOT, "assets")
+                os.makedirs(tmp_dir, exist_ok=True)
+                tmp_path = os.path.join(tmp_dir, full_row["filename"])
+                with open(tmp_path, "w", encoding="utf-8") as file_handle:
+                    file_handle.write(full_row["file_content"])
+
+                if self.game is not None:
+                    self.game.load_advanced_questions_from_file(tmp_path)
+                    self.game.advanced_questions_file = tmp_path
+            except Exception as exc:
+                self._error("Error", f"Could not load DB file.\n{exc}")
+                return
+
+            if callable(self.on_data_changed):
+                self.on_data_changed()
+            self._info("Active File Updated", f"Now using: {full_row['filename']}")
+            self.status_label.setText(f"Active questions file set to {full_row['filename']}.")
+
+        def upload_files(self):
+            file_paths, _ = QFileDialog.getOpenFileNames(
+                self,
+                "Select TXT file(s) to upload",
+                PROJECT_ROOT,
+                "Text Files (*.txt);;All Files (*.*)",
+            )
+            if not file_paths:
+                return
+
+            uploaded = 0
+            failed = 0
+            for path in file_paths:
+                try:
+                    with open(path, "r", encoding="utf-8") as file_handle:
+                        content = file_handle.read()
+                    upload_file(os.path.basename(path), content, file_type="questions", description=None)
+                    uploaded += 1
+                except Exception:
+                    failed += 1
+
+            self.refresh_files()
+            if callable(self.on_data_changed):
+                self.on_data_changed()
+            self.status_label.setText(f"Uploaded {uploaded} file(s); {failed} failed.")
+
+        def delete_selected_file(self):
+            row = self._selected_file()
+            if not row:
+                self._error("Select File", "Select a file to delete.")
+                return
+
+            if not self._confirm("Confirm Delete", f"Soft-delete this file from DB?\n\n{row.get('filename') or row.get('id')}"):
+                return
+
+            try:
+                ok = soft_delete_file(row["id"])
+            except Exception as exc:
+                self._error("Error", f"Could not delete file.\n{exc}")
+                return
+
+            if not ok:
+                self._error("Error", "File not found or already deleted.")
+                return
+
+            self.refresh_files()
+            if callable(self.on_data_changed):
+                self.on_data_changed()
+            self.status_label.setText("File soft-deleted from DB.")
+
+
+    class QtAdminPanelWindow(QWidget):
+        def __init__(self, root, user, handle_logout, handle_upload):
+            super().__init__()
+            self.root = root
+            self.user = user or {}
+            self.handle_logout = handle_logout
+            self.handle_upload = handle_upload
+            self.student_count = 0
+            self.file_count = 0
+            self.total_attempts = 0
+            self.progress_rows = []
+            self.files_cache = []
+            self.result_action = "logout"
+            self._build_ui()
+            self.refresh_dashboard_data()
+
+        def _build_ui(self):
+            self.setObjectName("dashboardRoot")
+            self.setWindowTitle("Admin Panel - Math Game")
+            self.resize(1480, 900)
+            self.setMinimumSize(1260, 760)
+            self.setStyleSheet(QT_ADMIN_PANEL_STYLES)
+
+            root_layout = QVBoxLayout(self)
+            root_layout.setContentsMargins(34, 28, 34, 28)
+            root_layout.setSpacing(0)
+
+            shell = QFrame()
+            shell.setObjectName("shell")
+            shell_layout = QHBoxLayout(shell)
+            shell_layout.setContentsMargins(18, 18, 18, 18)
+            shell_layout.setSpacing(18)
+            root_layout.addWidget(shell)
+
+            sidebar = QFrame()
+            sidebar.setObjectName("sidebar")
+            sidebar.setFixedWidth(218)
+            sidebar_layout = QVBoxLayout(sidebar)
+            sidebar_layout.setContentsMargins(18, 20, 18, 20)
+            sidebar_layout.setSpacing(14)
+            shell_layout.addWidget(sidebar)
+
+            brand = QFrame()
+            brand_layout = QVBoxLayout(brand)
+            brand_layout.setContentsMargins(0, 0, 0, 0)
+            brand_layout.setSpacing(4)
+            brand_title = QLabel("Math Game")
+            brand_title.setObjectName("brandTitle")
+            brand_sub = QLabel("Admin command deck")
+            brand_sub.setObjectName("brandSub")
+            brand_layout.addWidget(brand_title)
+            brand_layout.addWidget(brand_sub)
+            sidebar_layout.addWidget(brand)
+
+            nav_hint = QLabel("Choose a task. Each item below goes somewhere meaningful.")
+            nav_hint.setObjectName("bodyMuted")
+            nav_hint.setWordWrap(True)
+            sidebar_layout.addWidget(nav_hint)
+
+            for text, object_name, callback in (
+                ("+ Add Student", "navPrimary", self._focus_create_student),
+                ("Manage Students", "navSecondary", self.open_student_manager),
+                ("Progress Reports", "navSecondary", self.open_progress_dialog),
+                ("Question Bank", "navSecondary", self.open_question_manager),
+                ("Settings", "navSecondary", self._focus_admin_account),
+                ("Logout", "navDanger", self.request_logout),
+            ):
+                button = QPushButton(text)
+                button.setObjectName(object_name)
+                button.setCursor(Qt.CursorShape.PointingHandCursor)
+                button.clicked.connect(callback)
+                sidebar_layout.addWidget(button)
+            sidebar_layout.addStretch(1)
+
+            content_wrap = QHBoxLayout()
+            content_wrap.setSpacing(18)
+            shell_layout.addLayout(content_wrap, 1)
+
+            self.center_scroll = QScrollArea()
+            self.center_scroll.setWidgetResizable(True)
+            self.center_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+            content_wrap.addWidget(self.center_scroll, 1)
+
+            center = QWidget()
+            self.center_scroll.setWidget(center)
+            center_layout = QVBoxLayout(center)
+            center_layout.setContentsMargins(0, 0, 6, 0)
+            center_layout.setSpacing(18)
+
+            top_card = QFrame()
+            top_card.setObjectName("topCard")
+            top_layout = QHBoxLayout(top_card)
+            top_layout.setContentsMargins(22, 18, 22, 18)
+            top_layout.setSpacing(18)
+
+            title_wrap = QVBoxLayout()
+            title_wrap.setSpacing(8)
+            eyebrow = QLabel("ADMIN PANEL")
+            eyebrow.setObjectName("eyebrow")
+            eyebrow.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            title_wrap.addWidget(eyebrow, 0, Qt.AlignmentFlag.AlignLeft)
+            self.title_label = QLabel("Welcome, Admin")
+            self.title_label.setObjectName("titleLarge")
+            title_wrap.addWidget(self.title_label)
+            body = QLabel("Use the sidebar to move through student setup, reports, question banks, and admin settings.")
+            body.setObjectName("bodyMuted")
+            body.setWordWrap(True)
+            title_wrap.addWidget(body)
+            top_layout.addLayout(title_wrap, 1)
+
+            self.avatar_label = QLabel("A")
+            self.avatar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.avatar_label.setFixedSize(56, 56)
+            self.avatar_label.setStyleSheet(
+                "background: qlineargradient(x1:0,y1:0,x2:1,y2:1, stop:0 #7A59FF, stop:1 #FF7A45);"
+                "border-radius: 28px; color: #FFFFFF; font: 800 20px 'Segoe UI';"
+            )
+            top_layout.addWidget(self.avatar_label, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignTop)
+            center_layout.addWidget(top_card)
+
+            metrics_row = QHBoxLayout()
+            metrics_row.setSpacing(16)
+            self.metric_cards = {}
+            for key, label in (("students", "Students"), ("files", "Question Banks"), ("attempts", "Attempts")):
+                card = QFrame()
+                card.setObjectName("metricCard")
+                card_layout = QVBoxLayout(card)
+                card_layout.setContentsMargins(18, 16, 18, 16)
+                card_layout.setSpacing(6)
+                metric_label = QLabel(label)
+                metric_label.setObjectName("metricLabel")
+                metric_value = QLabel("0")
+                metric_value.setObjectName("metricValue")
+                hint = QLabel("")
+                hint.setObjectName("bodyMuted")
+                hint.setWordWrap(True)
+                card_layout.addWidget(metric_label)
+                card_layout.addWidget(metric_value)
+                card_layout.addWidget(hint)
+                metrics_row.addWidget(card, 1)
+                self.metric_cards[key] = {"value": metric_value, "hint": hint}
+            center_layout.addLayout(metrics_row)
+
+            hero_card = QFrame()
+            hero_card.setObjectName("heroCard")
+            hero_layout = QHBoxLayout(hero_card)
+            hero_layout.setContentsMargins(26, 24, 26, 24)
+            hero_layout.setSpacing(18)
+
+            hero_text = QVBoxLayout()
+            hero_text.setSpacing(10)
+            available = QLabel("Available Now | Admin Flow Upgrade")
+            available.setObjectName("eyebrow")
+            available.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+            hero_text.addWidget(available, 0, Qt.AlignmentFlag.AlignLeft)
+            hero_title = QLabel("Design student access, credentials, and reporting from one control deck.")
+            hero_title.setObjectName("heroTitle")
+            hero_title.setWordWrap(True)
+            hero_text.addWidget(hero_title)
+            hero_body = QLabel("The layout follows the dark dashboard reference while keeping the same admin capabilities intact.")
+            hero_body.setObjectName("heroBody")
+            hero_body.setWordWrap(True)
+            hero_text.addWidget(hero_body)
+            hero_hint = QLabel("Student setup, score tracking, question banks, and security live in one mission deck.")
+            hero_hint.setObjectName("bodyMuted")
+            hero_hint.setWordWrap(True)
+            hero_text.addWidget(hero_hint)
+            hero_text.addStretch(1)
+            hero_layout.addLayout(hero_text, 12)
+
+            hero_visual = QFrame()
+            hero_visual.setObjectName("moduleCard")
+            hero_visual_layout = QVBoxLayout(hero_visual)
+            hero_visual_layout.setContentsMargins(12, 12, 12, 12)
+            hero_visual_layout.setSpacing(6)
+            rocket_art = QtRocketWidget()
+            hero_visual_layout.addWidget(rocket_art, 1)
+            rocket_title = QLabel("Rocket Control")
+            rocket_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            rocket_title.setObjectName("sectionTitle")
+            hero_visual_layout.addWidget(rocket_title)
+            rocket_copy = QLabel("Asteroid-theme visuals keep the admin deck connected to the game instead of looking like a generic dashboard.")
+            rocket_copy.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            rocket_copy.setWordWrap(True)
+            rocket_copy.setObjectName("bodyMuted")
+            hero_visual_layout.addWidget(rocket_copy)
+            hero_layout.addWidget(hero_visual, 7)
+            center_layout.addWidget(hero_card)
+
+            self.add_student_card = QFrame()
+            self.add_student_card.setObjectName("moduleCard")
+            add_layout = QVBoxLayout(self.add_student_card)
+            add_layout.setContentsMargins(22, 20, 22, 20)
+            add_layout.setSpacing(14)
+            add_title = QLabel("Student Launch Bay")
+            add_title.setObjectName("sectionTitle")
+            add_layout.addWidget(add_title)
+            add_sub = QLabel("Create a student profile, generate credentials, and prepare them for the next mission.")
+            add_sub.setObjectName("sectionBody")
+            add_sub.setWordWrap(True)
+            add_layout.addWidget(add_sub)
+            add_grid = QGridLayout()
+            add_grid.setHorizontalSpacing(14)
+            add_grid.setVerticalSpacing(10)
+            add_layout.addLayout(add_grid)
+            self.student_name_edit = self._build_labeled_edit(add_grid, 0, 0, "Student Name", placeholder="Enter full student name")
+            self.student_grade_edit = self._build_labeled_edit(add_grid, 0, 1, "Standard (1-10)", placeholder="e.g. 5")
+            self.student_batch_edit = self._build_labeled_edit(add_grid, 1, 0, "Batch (optional)", placeholder="e.g. A1 or 2026")
+            self.student_roll_edit = self._build_labeled_edit(add_grid, 1, 1, "Enrollment/Roll No", placeholder="Numeric roll number")
+            add_actions = QHBoxLayout()
+            add_actions.setSpacing(10)
+            for text, object_name, callback in (
+                ("Create Student Login", "primaryAction", self.add_student),
+                ("Clear", "ghostAction", self._clear_student_form),
+            ):
+                button = QPushButton(text)
+                button.setObjectName(object_name)
+                button.setCursor(Qt.CursorShape.PointingHandCursor)
+                button.clicked.connect(callback)
+                add_actions.addWidget(button)
+            add_actions.addStretch(1)
+            add_layout.addLayout(add_actions)
+            center_layout.addWidget(self.add_student_card)
+
+            credentials_card = QFrame()
+            credentials_card.setObjectName("moduleCard")
+            credentials_layout = QVBoxLayout(credentials_card)
+            credentials_layout.setContentsMargins(22, 20, 22, 20)
+            credentials_layout.setSpacing(12)
+            cred_title = QLabel("Generated Credentials")
+            cred_title.setObjectName("sectionTitle")
+            credentials_layout.addWidget(cred_title)
+            self.generated_login = QLabel("Login ID: -")
+            self.generated_login.setStyleSheet("font: 700 14px 'Consolas'; color: #F6F7FF;")
+            self.generated_pass = QLabel("Password: -")
+            self.generated_pass.setStyleSheet("font: 700 14px 'Consolas'; color: #F6F7FF;")
+            credentials_layout.addWidget(self.generated_login)
+            credentials_layout.addWidget(self.generated_pass)
+            cred_actions = QHBoxLayout()
+            cred_actions.setSpacing(10)
+            copy_button = QPushButton("Copy Credentials")
+            copy_button.setObjectName("ghostAction")
+            copy_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            copy_button.clicked.connect(self.copy_generated_credentials)
+            clear_creds_btn = QPushButton("Clear Credentials")
+            clear_creds_btn.setObjectName("ghostAction")
+            clear_creds_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            clear_creds_btn.clicked.connect(self.clear_generated_credentials)
+            cred_actions.addWidget(copy_button)
+            cred_actions.addWidget(clear_creds_btn)
+            cred_actions.addStretch(1)
+            credentials_layout.addLayout(cred_actions)
+            center_layout.addWidget(credentials_card)
+
+            self.admin_account_card = QFrame()
+            self.admin_account_card.setObjectName("moduleCard")
+            admin_layout = QVBoxLayout(self.admin_account_card)
+            admin_layout.setContentsMargins(22, 20, 22, 20)
+            admin_layout.setSpacing(14)
+            admin_title = QLabel("Settings")
+            admin_title.setObjectName("sectionTitle")
+            admin_layout.addWidget(admin_title)
+            admin_sub = QLabel("Manage admin access, security changes, and quick deck maintenance from one settings panel.")
+            admin_sub.setObjectName("sectionBody")
+            admin_sub.setWordWrap(True)
+            admin_layout.addWidget(admin_sub)
+            status_row = QHBoxLayout()
+            status_row.setSpacing(16)
+            current_label = QLabel("Current Admin")
+            current_label.setObjectName("settingsKey")
+            self.admin_identity_value = QLabel("-")
+            self.admin_identity_value.setObjectName("settingsValue")
+            status_row.addWidget(current_label)
+            status_row.addWidget(self.admin_identity_value, 1)
+            admin_layout.addLayout(status_row)
+            admin_grid = QGridLayout()
+            admin_grid.setHorizontalSpacing(14)
+            admin_grid.setVerticalSpacing(10)
+            admin_layout.addLayout(admin_grid)
+            self.admin_login_edit = self._build_labeled_edit(admin_grid, 0, 0, "Admin Login ID", placeholder="Enter login ID")
+            self.admin_password_edit = self._build_labeled_edit(admin_grid, 0, 1, "New Password", placeholder="Leave blank to keep current password", echo=True)
+            self.admin_confirm_password_edit = self._build_labeled_edit(admin_grid, 1, 0, "Confirm New Password", placeholder="Retype new password", echo=True)
+            admin_actions = QHBoxLayout()
+            admin_actions.setSpacing(10)
+            for text, object_name, callback in (
+                ("Save Settings", "secondaryAction", self.update_admin_account),
+                ("Refresh Deck", "primaryAction", self.refresh_dashboard_data),
+                ("Clear Credentials Panel", "ghostAction", self.clear_generated_credentials),
+                ("Show / Hide Password", "ghostAction", self.toggle_admin_password_visibility),
+            ):
+                button = QPushButton(text)
+                button.setObjectName(object_name)
+                button.setCursor(Qt.CursorShape.PointingHandCursor)
+                button.clicked.connect(callback)
+                admin_actions.addWidget(button)
+            admin_actions.addStretch(1)
+            admin_layout.addLayout(admin_actions)
+            center_layout.addWidget(self.admin_account_card)
+            center_layout.addStretch(1)
+
+            right_rail = QVBoxLayout()
+            right_rail.setSpacing(18)
+            content_wrap.addLayout(right_rail)
+
+            map_card = QFrame()
+            map_card.setObjectName("mapCard")
+            map_layout = QVBoxLayout(map_card)
+            map_layout.setContentsMargins(20, 20, 20, 20)
+            map_layout.setSpacing(10)
+            map_title = QLabel("Live Admin Map")
+            map_title.setObjectName("sectionTitle")
+            map_layout.addWidget(map_title)
+            self.map_status = QLabel("Awaiting dashboard refresh.")
+            self.map_status.setObjectName("sectionBody")
+            self.map_status.setWordWrap(True)
+            map_layout.addWidget(self.map_status)
+            self.map_meta = QLabel("")
+            self.map_meta.setObjectName("bodyMuted")
+            self.map_meta.setWordWrap(True)
+            map_layout.addWidget(self.map_meta)
+            map_layout.addStretch(1)
+            right_rail.addWidget(map_card)
+
+            quick_card = QFrame()
+            quick_card.setObjectName("railCard")
+            quick_layout = QVBoxLayout(quick_card)
+            quick_layout.setContentsMargins(20, 20, 20, 20)
+            quick_layout.setSpacing(10)
+            quick_title = QLabel("Flight Checks")
+            quick_title.setObjectName("sectionTitle")
+            quick_layout.addWidget(quick_title)
+            self.flight_labels = []
+            for _ in range(4):
+                label = QLabel("")
+                label.setObjectName("activityText")
+                label.setWordWrap(True)
+                quick_layout.addWidget(label)
+                self.flight_labels.append(label)
+            quick_button = QPushButton("Open Settings")
+            quick_button.setObjectName("primaryAction")
+            quick_button.setCursor(Qt.CursorShape.PointingHandCursor)
+            quick_button.clicked.connect(self._focus_admin_account)
+            quick_layout.addWidget(quick_button)
+            right_rail.addWidget(quick_card)
+
+            activity_card = QFrame()
+            activity_card.setObjectName("railCard")
+            activity_layout = QVBoxLayout(activity_card)
+            activity_layout.setContentsMargins(20, 20, 20, 20)
+            activity_layout.setSpacing(10)
+            activity_title = QLabel("Activity")
+            activity_title.setObjectName("sectionTitle")
+            activity_layout.addWidget(activity_title)
+            self.activity_labels = []
+            for _ in range(5):
+                label = QLabel("No activity yet.")
+                label.setObjectName("activityText")
+                label.setWordWrap(True)
+                activity_layout.addWidget(label)
+                self.activity_labels.append(label)
+            activity_layout.addStretch(1)
+            right_rail.addWidget(activity_card, 1)
+
+        def _build_labeled_edit(self, grid, row, col, label_text, placeholder="", echo=False):
+            label = QLabel(label_text)
+            label.setObjectName("fieldLabel")
+            grid.addWidget(label, row * 2, col)
+            edit = QLineEdit()
+            edit.setPlaceholderText(placeholder)
+            edit.setClearButtonEnabled(True)
+            if echo:
+                edit.setEchoMode(QLineEdit.EchoMode.Password)
+            grid.addWidget(edit, row * 2 + 1, col)
+            return edit
+
+        def _get_welcome_name(self):
+            welcome_name = "Admin"
+            if isinstance(self.user, dict):
+                welcome_name = self.user.get("login_id") or self.user.get("name") or "Admin"
+            if welcome_name == "Admin":
+                try:
+                    admin_info = get_admin_user()
+                    if admin_info and admin_info.get("login_id"):
+                        welcome_name = admin_info.get("login_id")
+                except Exception:
+                    pass
+            return welcome_name
+
+        def _scroll_to_top(self):
+            self.center_scroll.verticalScrollBar().setValue(0)
+
+        def _focus_create_student(self):
+            self._scroll_to_top()
+            self.student_name_edit.setFocus()
+
+        def _focus_admin_account(self):
+            self.center_scroll.verticalScrollBar().setValue(self.center_scroll.verticalScrollBar().maximum())
+            self.admin_login_edit.setFocus()
+
+        def open_question_manager(self):
+            dialog = QtQuestionManagerDialog(game=self.handle_upload.__self__ if hasattr(self.handle_upload, "__self__") else None, on_data_changed=self.refresh_dashboard_data, parent=self)
+            dialog.exec()
+            self.refresh_dashboard_data()
+
+        def request_logout(self):
+            self.result_action = "logout"
+            self.close()
+
+        def closeEvent(self, event):
+            self.result_action = "logout"
+            super().closeEvent(event)
+
+        def paintEvent(self, event):
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            painter.fillRect(self.rect(), QColor("#07111F"))
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(10, 64, 98, 92))
+            painter.drawEllipse(QRectF(70, 30, 440, 280))
+            painter.setBrush(QColor(22, 47, 87, 130))
+            painter.drawEllipse(QRectF(self.width() - 430, 70, 320, 250))
+            painter.setBrush(QColor(255, 138, 43, 58))
+            painter.drawEllipse(QRectF(self.width() - 240, self.height() - 250, 180, 180))
+
+            for x, y, color in (
+                (180, 84, "#38D1FF"),
+                (240, 110, "#FFFFFF"),
+                (1260, 180, "#38D1FF"),
+                (1195, 258, "#FF8A2B"),
+                (1310, 314, "#38D1FF"),
+                (1128, 388, "#FFFFFF"),
+            ):
+                painter.setBrush(QColor(color))
+                painter.drawEllipse(QRectF(x, y, 6, 6))
+
+            painter.save()
+            painter.translate(self.width() - 180, 115)
+            painter.rotate(18)
+            painter.setBrush(QColor("#FF8A2B"))
+            flame = QPainterPath()
+            flame.moveTo(-18, 0)
+            flame.cubicTo(-46, -10, -52, -26, -22, -20)
+            flame.cubicTo(-46, -3, -46, 3, -22, 20)
+            flame.cubicTo(-52, 26, -46, 10, -18, 0)
+            painter.fillPath(flame, QColor("#FF8A2B"))
+
+            body = QPainterPath()
+            body.moveTo(0, -18)
+            body.cubicTo(26, -26, 58, -16, 74, 0)
+            body.cubicTo(58, 16, 26, 26, 0, 18)
+            body.cubicTo(10, 6, 10, -6, 0, -18)
+            painter.fillPath(body, QColor("#EAF6FF"))
+            painter.setBrush(QColor("#2E7CFF"))
+            painter.drawEllipse(QRectF(28, -8, 18, 18))
+
+            fin_top = QPainterPath()
+            fin_top.moveTo(12, -10)
+            fin_top.lineTo(2, -34)
+            fin_top.lineTo(28, -16)
+            fin_top.closeSubpath()
+            painter.fillPath(fin_top, QColor("#38D1FF"))
+
+            fin_bottom = QPainterPath()
+            fin_bottom.moveTo(12, 10)
+            fin_bottom.lineTo(2, 34)
+            fin_bottom.lineTo(28, 16)
+            fin_bottom.closeSubpath()
+            painter.fillPath(fin_bottom, QColor("#FF8A2B"))
+            painter.restore()
+
+        def _show_info(self, title, message):
+            QMessageBox.information(self, title, message)
+
+        def _show_error(self, title, message):
+            QMessageBox.critical(self, title, message)
+
+        def refresh_dashboard_data(self):
+            try:
+                students = get_all_students()
+            except Exception:
+                students = []
+            try:
+                self.progress_rows = get_student_progress()
+            except Exception:
+                self.progress_rows = []
+            try:
+                self.files_cache = get_all_files()
+            except Exception:
+                self.files_cache = []
+
+            self.student_count = len(students)
+            self.file_count = len(self.files_cache)
+            self.total_attempts = sum(int(row.get("attempts_count") or 0) for row in self.progress_rows)
+
+            self.metric_cards["students"]["value"].setText(str(self.student_count))
+            self.metric_cards["students"]["hint"].setText("Active student records in the roster.")
+            self.metric_cards["files"]["value"].setText(str(self.file_count))
+            self.metric_cards["files"]["hint"].setText("Uploaded question banks ready for advanced quiz use.")
+            self.metric_cards["attempts"]["value"].setText(str(self.total_attempts))
+            self.metric_cards["attempts"]["hint"].setText("Recorded attempts across basic, advanced, and T20 modes.")
+
+            welcome_name = self._get_welcome_name()
+            self.title_label.setText(f"Welcome, {welcome_name}")
+            self.avatar_label.setText(welcome_name[:1].upper())
+            self.map_status.setText(f"{self.student_count} students visible across the control deck.")
+            self.map_meta.setText(f"{self.file_count} question bank(s) stored. {self.total_attempts} attempt(s) tracked so far.")
+            self.reload_admin_info()
+            self._refresh_flight_checks()
+            self._refresh_activity_feed()
+
+        def _refresh_flight_checks(self):
+            checks = [
+                f"Student bay: {'ready' if self.student_count >= 0 else 'offline'} with {self.student_count} roster entries.",
+                f"Quiz fuel: {self.file_count} uploaded question bank(s) available.",
+                f"Telemetry: {self.total_attempts} total attempt record(s) across the game.",
+                f"Security: admin settings synced for {self.admin_identity_value.text() or 'Admin'}.",
+            ]
+            for label, text in zip(self.flight_labels, checks):
+                label.setText(text)
+
+        def _refresh_activity_feed(self):
+            activity_lines = []
+            recent_rows = sorted(self.progress_rows, key=lambda row: str(row.get("last_attempt_at") or ""), reverse=True)
+            for row in recent_rows[:3]:
+                student = row.get("name") or "Student"
+                last_attempt = _format_qt_admin_attempt_time(row.get("last_attempt_at"))
+                attempts = int(row.get("attempts_count") or 0)
+                activity_lines.append(f"{student} | {attempts} attempts | last: {last_attempt}")
+
+            for row in self.files_cache[:2]:
+                filename = row.get("filename") or "Unnamed file"
+                uploaded_at = _format_qt_admin_attempt_time(row.get("uploaded_at"))
+                activity_lines.append(f"Question bank: {filename} | uploaded {uploaded_at}")
+
+            while len(activity_lines) < len(self.activity_labels):
+                activity_lines.append("Waiting for new admin activity.")
+
+            for label, text in zip(self.activity_labels, activity_lines):
+                label.setText(text)
+
+        def reload_admin_info(self):
+            try:
+                admin = get_admin_user()
+            except Exception as exc:
+                self._show_error("Error", f"Failed to load admin info.\n{exc}")
+                return
+
+            if not admin:
+                self.admin_login_edit.clear()
+                self.admin_password_edit.clear()
+                self.admin_confirm_password_edit.clear()
+                self.admin_identity_value.setText("-")
+                return
+
+            admin_login_id = admin.get("login_id") or ""
+            self.admin_login_edit.setText(admin_login_id)
+            self.admin_password_edit.clear()
+            self.admin_confirm_password_edit.clear()
+            self.admin_password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+            self.admin_confirm_password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+            self.admin_identity_value.setText(admin_login_id or "Admin")
+
+        def toggle_admin_password_visibility(self):
+            visible = self.admin_password_edit.echoMode() == QLineEdit.EchoMode.Password
+            next_mode = QLineEdit.EchoMode.Normal if visible else QLineEdit.EchoMode.Password
+            self.admin_password_edit.setEchoMode(next_mode)
+            self.admin_confirm_password_edit.setEchoMode(next_mode)
+
+        def _clear_student_form(self):
+            self.student_name_edit.clear()
+            self.student_grade_edit.clear()
+            self.student_batch_edit.clear()
+            self.student_roll_edit.clear()
+            self.student_name_edit.setFocus()
+
+        def clear_generated_credentials(self):
+            self.generated_login.setText("Login ID: -")
+            self.generated_pass.setText("Password: -")
+
+        def validate_student_form(self):
+            name = self.student_name_edit.text().strip()
+            grade_text = self.student_grade_edit.text().strip()
+            batch = self.student_batch_edit.text().strip()
+            enrollment_text = self.student_roll_edit.text().strip()
+
+            errors = []
+            if not name:
+                errors.append("Student name is required.")
+            elif len(name) > MAX_STUDENT_NAME_LENGTH:
+                errors.append(f"Student name cannot exceed {MAX_STUDENT_NAME_LENGTH} characters.")
+            elif not STUDENT_NAME_PATTERN.fullmatch(name):
+                errors.append("Student name can contain only letters, spaces, apostrophe ('), dot (.) and hyphen (-).")
+
+            if not grade_text:
+                errors.append("Standard is required.")
+            elif not grade_text.isdigit():
+                errors.append("Standard must be a number between 1 and 10.")
+            elif not (1 <= int(grade_text) <= 10):
+                errors.append("Standard must be between 1 and 10.")
+
+            if batch:
+                if len(batch) > MAX_BATCH_LENGTH:
+                    errors.append(f"Batch cannot exceed {MAX_BATCH_LENGTH} characters.")
+                elif not BATCH_PATTERN.fullmatch(batch):
+                    errors.append("Batch can contain only letters, numbers, spaces, slash (/), hyphen (-) and underscore (_).")
+
+            if not enrollment_text:
+                errors.append("Enrollment/Roll number is required.")
+            elif not enrollment_text.isdigit():
+                errors.append("Enrollment/Roll number must be numeric.")
+
+            if errors:
+                self._show_error("Validation Error", "\n".join(errors))
+                return None
+
+            return name, int(grade_text), batch, int(enrollment_text)
+
+        def add_student(self):
+            validated = self.validate_student_form()
+            if not validated:
+                return
+
+            name, grade, batch, enrollment_id = validated
+            try:
+                login_id, temp_password = create_student_user(
+                    name=name,
+                    grade=grade,
+                    batch=batch if batch else "00",
+                    enrollment_id=enrollment_id,
+                )
+            except Exception as exc:
+                self._show_error("Error", f"Failed to create student.\n{exc}")
+                return
+
+            self.generated_login.setText(f"Login ID: {login_id}")
+            self.generated_pass.setText(f"Password: {temp_password}")
+            self._show_info("Student Created", f"Successfully created: {login_id}")
+            self._clear_student_form()
+            self.refresh_dashboard_data()
+
+        def copy_generated_credentials(self):
+            login_text = self.generated_login.text()
+            password_text = self.generated_pass.text()
+            login_value = login_text.split(":", 1)[1].strip() if ":" in login_text else "-"
+            password_value = password_text.split(":", 1)[1].strip() if ":" in password_text else "-"
+            if login_value == "-" and password_value == "-":
+                self._show_info("Copy", "No generated credentials to copy yet.")
+                return
+            QApplication.clipboard().setText(f"Login ID: {login_value}\nPassword: {password_value}")
+            self._show_info("Copied", "Generated credentials copied to clipboard.")
+
+        def update_admin_account(self):
+            new_login = self.admin_login_edit.text().strip() or None
+            new_pass = self.admin_password_edit.text().strip() or None
+            confirm_pass = self.admin_confirm_password_edit.text().strip() or None
+
+            if new_login is None and new_pass is None:
+                self._show_info("No Changes", "Nothing to update for admin account.")
+                return
+
+            if new_login is not None and len(new_login) < 3:
+                self._show_error("Validation Error", "Login ID must be at least 3 characters long.")
+                return
+
+            if new_login is not None and len(new_login) > MAX_LOGIN_ID_LENGTH:
+                self._show_error("Validation Error", f"Login ID cannot exceed {MAX_LOGIN_ID_LENGTH} characters.")
+                return
+
+            if new_login is not None and not LOGIN_ID_PATTERN.fullmatch(new_login):
+                self._show_error("Validation Error", "Login ID can contain only letters, numbers, dot (.), underscore (_) and hyphen (-).")
+                return
+
+            if new_pass is not None and len(new_pass) > MAX_PASSWORD_LENGTH:
+                self._show_error("Validation Error", f"Password cannot exceed {MAX_PASSWORD_LENGTH} characters.")
+                return
+
+            if new_pass is not None and len(new_pass) < 6:
+                self._show_error("Validation Error", "New password must be at least 6 characters long.")
+                return
+
+            if new_pass is not None and confirm_pass != new_pass:
+                self._show_error("Validation Error", "Confirm New Password must match the new password.")
+                return
+
+            try:
+                updated = update_admin_credentials(new_login=new_login, new_password=new_pass)
+            except Exception as exc:
+                self._show_error("Error", f"Failed to update admin account.\n{exc}")
+                return
+
+            if not updated:
+                self._show_error("Error", "Admin account not found or no changes applied.")
+                return
+
+            self._show_info("Success", "Admin account updated successfully.")
+            self.admin_password_edit.clear()
+            self.admin_confirm_password_edit.clear()
+            self.admin_password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+            self.admin_confirm_password_edit.setEchoMode(QLineEdit.EchoMode.Password)
+            self.refresh_dashboard_data()
+
+        def open_student_manager(self):
+            dialog = QtStudentManagerDialog(on_data_changed=self.refresh_dashboard_data, parent=self)
+            dialog.exec()
+            self.refresh_dashboard_data()
+
+        def open_progress_dialog(self):
+            dialog = QtProgressDialog(on_data_changed=self.refresh_dashboard_data, parent=self)
+            dialog.exec()
+            self.refresh_dashboard_data()
+
+
+    def run_qt_admin_panel(root, user, handle_logout, handle_upload):
+        app = QApplication.instance()
+        if app is None:
+            app = QApplication(sys.argv)
+        app.setQuitOnLastWindowClosed(False)
+
+        root_hidden = False
+        if root is not None and root.winfo_exists():
+            try:
+                root.withdraw()
+                root_hidden = True
+            except tk.TclError:
+                root_hidden = False
+
+        window = QtAdminPanelWindow(root, user, handle_logout, handle_upload)
+        screen = app.primaryScreen()
+        if screen is not None:
+            geometry = screen.availableGeometry()
+            window.move(
+                geometry.center().x() - (window.width() // 2),
+                geometry.center().y() - (window.height() // 2),
+            )
+        window.show()
+        window.raise_()
+        window.activateWindow()
+
+        while window.isVisible():
+            app.processEvents()
+            if root is not None and root.winfo_exists():
+                try:
+                    root.update_idletasks()
+                    root.update()
+                except tk.TclError:
+                    pass
+            time.sleep(0.016)
+
+        if root_hidden and root is not None and root.winfo_exists():
+            try:
+                root.deiconify()
+            except tk.TclError:
+                pass
+
+        if callable(handle_logout):
+            handle_logout()
+else:
+    run_qt_admin_panel = None
 
 LOGIN_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 STUDENT_NAME_PATTERN = re.compile(r"^[A-Za-z][A-Za-z .'-]*$")

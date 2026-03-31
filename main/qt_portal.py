@@ -1,9 +1,10 @@
 import random
 import sys
 import time
+import math
 
-from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QPainter
+from PySide6.QtCore import QRectF, Qt, QTimer
+from PySide6.QtGui import QColor, QFont, QPainter, QPen, QRadialGradient
 from PySide6.QtWidgets import (
     QApplication,
     QBoxLayout,
@@ -98,6 +99,7 @@ class PortalWindow(QWidget):
         self.selected_action = None
         self._stars = []
         self._starfield_size = None
+        self._space_phase = 0.0
 
         self.setWindowTitle("Math Game")
         self.resize(1260, 760)
@@ -167,6 +169,9 @@ class PortalWindow(QWidget):
             """
         )
         self.setObjectName("root")
+        self._space_timer = QTimer(self)
+        self._space_timer.timeout.connect(self._advance_space_scene)
+        self._space_timer.start(40)
         self._build_ui()
 
     def _build_ui(self):
@@ -177,14 +182,21 @@ class PortalWindow(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("QScrollArea { background: transparent; } QScrollArea > QWidget > QWidget { background: transparent; }")
+        scroll.viewport().setAutoFillBackground(False)
+        scroll.viewport().setStyleSheet("background: transparent;")
         outer_layout.addWidget(scroll)
 
-        scroll_content = QWidget()
-        scroll.setWidget(scroll_content)
+        self.scroll = scroll
+        self.scroll_content = QWidget()
+        self.scroll_content.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.scroll_content.setStyleSheet("background: transparent;")
+        scroll.setWidget(self.scroll_content)
 
-        self.root_layout = QVBoxLayout(scroll_content)
+        self.root_layout = QVBoxLayout(self.scroll_content)
         self.root_layout.setContentsMargins(72, 52, 72, 30)
         self.root_layout.setSpacing(20)
+        self.root_layout.addStretch(1)
 
         self.shell = QFrame()
         self.shell.setObjectName("shell")
@@ -374,6 +386,12 @@ class PortalWindow(QWidget):
         self.body_label.setMaximumWidth(16777215 if compact else 420)
         self.note_label.setMaximumWidth(16777215 if compact else 420)
         self.portal_desc.setMaximumWidth(16777215 if compact else 380)
+        self.shell.setMaximumWidth(16777215 if compact else 1120)
+        minimum_shell_height = 560 if compact else 610
+        self.shell.setMinimumHeight(minimum_shell_height)
+
+        viewport_height = max(self.height() - 12, minimum_shell_height + 120)
+        self.scroll_content.setMinimumHeight(viewport_height)
 
         footer_alignment = Qt.AlignmentFlag.AlignLeft if tight else Qt.AlignmentFlag.AlignHCenter
         self.footer.setAlignment(footer_alignment)
@@ -400,28 +418,164 @@ class PortalWindow(QWidget):
                     "x": rng.randint(18, max(18, self.width() - 18)),
                     "y": rng.randint(18, max(18, self.height() - 18)),
                     "r": rng.choice((2, 2, 3)),
+                    "phase": rng.random() * math.pi * 2,
+                    "speed": rng.uniform(0.7, 1.5),
                 }
             )
         self._stars = stars
         self._starfield_size = size_key
 
+    def _advance_space_scene(self):
+        self._space_phase = (self._space_phase + 0.045) % (math.pi * 2)
+        self.update()
+
     def paintEvent(self, event):
         self._ensure_stars()
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
-        painter.fillRect(self.rect(), QColor("#120A25"))
+        painter.fillRect(self.rect(), QColor("#07111F"))
+
+        phase = self._space_phase
+        saturn_dx = math.sin(phase * 0.62) * 6
+        saturn_dy = math.cos(phase * 0.44) * 4
+        mars_dx = math.cos(phase * 0.48) * 5
+        mars_dy = math.sin(phase * 0.71) * 4
+        moon_angle = phase * 0.95
+        moon_orbit_x = math.cos(moon_angle) * 24
+        moon_orbit_y = math.sin(moon_angle) * 16
 
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#2B1762"))
-        painter.drawEllipse(QRectF(160, 22, 420, 280))
-        painter.setBrush(QColor("#214B9A"))
-        painter.drawEllipse(QRectF(self.width() - 360, 100, 280, 210))
+
+        nebula_left = QRadialGradient(self.width() * 0.26, self.height() * 0.24, 260)
+        nebula_left.setColorAt(0.0, QColor(56, 209, 255, 55))
+        nebula_left.setColorAt(0.45, QColor(43, 23, 98, 110))
+        nebula_left.setColorAt(1.0, QColor(0, 0, 0, 0))
+        painter.setBrush(nebula_left)
+        painter.drawEllipse(QRectF(40, -10, 520, 360))
+
+        nebula_right = QRadialGradient(self.width() * 0.82, self.height() * 0.28, 210)
+        nebula_right.setColorAt(0.0, QColor(46, 124, 255, 70))
+        nebula_right.setColorAt(0.5, QColor(20, 60, 128, 90))
+        nebula_right.setColorAt(1.0, QColor(0, 0, 0, 0))
+        painter.setBrush(nebula_right)
+        painter.drawEllipse(QRectF(self.width() - 360, 40, 300, 240))
+
+        orbit_pen = QPen(QColor(56, 209, 255, 48))
+        orbit_pen.setWidth(2)
+        orbit_pen.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(orbit_pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(QRectF(86 + saturn_dx, 136 + saturn_dy, 330, 112))
+
+        painter.setPen(Qt.PenStyle.NoPen)
+
+        saturn = QRadialGradient(256 + saturn_dx, 160 + saturn_dy, 140, 212 + saturn_dx, 124 + saturn_dy)
+        saturn.setColorAt(0.0, QColor("#FFF4CF"))
+        saturn.setColorAt(0.34, QColor("#E3C97D"))
+        saturn.setColorAt(0.68, QColor("#BA9350"))
+        saturn.setColorAt(1.0, QColor("#7A5428"))
+        painter.setBrush(saturn)
+        painter.drawEllipse(QRectF(120 + saturn_dx, 58 + saturn_dy, 250, 250))
+
+        painter.setBrush(QColor(255, 255, 255, 42))
+        painter.drawEllipse(QRectF(182 + saturn_dx, 96 + saturn_dy, 62, 50))
+
+        painter.setBrush(QColor(129, 95, 44, 120))
+        for rect in (
+            QRectF(150 + saturn_dx, 128 + saturn_dy, 178, 26),
+            QRectF(166 + saturn_dx, 168 + saturn_dy, 150, 24),
+            QRectF(146 + saturn_dx, 206 + saturn_dy, 164, 22),
+            QRectF(188 + saturn_dx, 238 + saturn_dy, 112, 18),
+        ):
+            painter.drawEllipse(rect)
+
+        ring_pen_back = QPen(QColor(255, 255, 255, 58))
+        ring_pen_back.setWidth(10)
+        painter.setPen(ring_pen_back)
+        painter.drawArc(QRectF(86 + saturn_dx, 136 + saturn_dy, 330, 112), 18 * 16, 144 * 16)
+
+        mars = QRadialGradient(
+            self.width() - 180 + mars_dx,
+            166 + mars_dy,
+            94,
+            self.width() - 198 + mars_dx,
+            144 + mars_dy,
+        )
+        mars.setColorAt(0.0, QColor("#FFD2A8"))
+        mars.setColorAt(0.34, QColor("#E6935E"))
+        mars.setColorAt(0.72, QColor("#B85633"))
+        mars.setColorAt(1.0, QColor("#742A17"))
+        painter.setBrush(mars)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawEllipse(QRectF(self.width() - 256 + mars_dx, 92 + mars_dy, 156, 156))
+
+        painter.setBrush(QColor(255, 255, 255, 34))
+        painter.drawEllipse(QRectF(self.width() - 214 + mars_dx, 118 + mars_dy, 42, 32))
+
+        painter.setBrush(QColor(126, 48, 27, 110))
+        for rect in (
+            QRectF(self.width() - 230 + mars_dx, 138 + mars_dy, 28, 22),
+            QRectF(self.width() - 178 + mars_dx, 178 + mars_dy, 34, 28),
+            QRectF(self.width() - 148 + mars_dx, 132 + mars_dy, 22, 18),
+            QRectF(self.width() - 216 + mars_dx, 206 + mars_dy, 18, 14),
+        ):
+            painter.drawEllipse(rect)
+
+        ring_pen_front = QPen(QColor("#59DAFF"))
+        ring_pen_front.setWidth(4)
+        painter.setPen(ring_pen_front)
+        painter.drawArc(QRectF(86 + saturn_dx, 136 + saturn_dy, 330, 112), 198 * 16, 158 * 16)
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(255, 138, 43, 44))
+        painter.drawEllipse(QRectF(self.width() - 228 + mars_dx, self.height() - 152 + mars_dy, 132, 102))
+
+        moon_rect = QRectF(
+            self.width() - 178 + mars_dx + moon_orbit_x,
+            162 + mars_dy + moon_orbit_y,
+            22,
+            22,
+        )
+        painter.setBrush(QColor(255, 255, 255, 38))
+        painter.drawEllipse(moon_rect.adjusted(-4, -4, 4, 4))
+        painter.setPen(QPen(QColor("#CFEFFF"), 1))
+        painter.setBrush(QColor("#EAF6FF"))
+        painter.drawEllipse(moon_rect)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(170, 190, 210, 120))
+        painter.drawEllipse(moon_rect.adjusted(5, 6, -4, -3))
 
         for star in self._stars:
-            painter.setBrush(QColor("#FFFFFF"))
+            twinkle = (math.sin((self._space_phase * star["speed"]) + star["phase"]) + 1.0) / 2.0
+            glow_radius = star["r"] * (2.4 + (twinkle * 0.9))
+            glow_alpha = int(28 + (twinkle * 54))
+            core_alpha = int(170 + (twinkle * 85))
+
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(56, 209, 255, glow_alpha))
+            painter.drawEllipse(
+                QRectF(
+                    star["x"] - glow_radius,
+                    star["y"] - glow_radius,
+                    glow_radius * 2,
+                    glow_radius * 2,
+                )
+            )
+
+            painter.setBrush(QColor(255, 255, 255, core_alpha))
             painter.drawEllipse(
                 QRectF(star["x"] - star["r"], star["y"] - star["r"], star["r"] * 2, star["r"] * 2)
             )
+
+        painter.setBrush(QColor("#38D1FF"))
+        for x, y, r in (
+            (92, 82, 2),
+            (132, 44, 3),
+            (self.width() - 124, 74, 2),
+            (self.width() - 82, 132, 3),
+            (self.width() - 142, self.height() - 96, 2),
+        ):
+            painter.drawEllipse(QRectF(x, y, r * 2, r * 2))
 
 
 def run_qt_portal():
