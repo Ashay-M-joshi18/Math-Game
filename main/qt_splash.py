@@ -7,7 +7,7 @@ from PySide6.QtCore import QEasingCurve, QElapsedTimer, QRectF, QTimer, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import QApplication, QWidget
 
-
+# This file implements a custom splash screen with an animated rocket launch scene.
 class RocketSplashScreen(QWidget):
     def __init__(self, duration_ms=2800):
         super().__init__()
