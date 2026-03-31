@@ -72,15 +72,25 @@ class RocketSplashScreen(QWidget):
         self._starfield_size = size_key
 
     def _draw_star(self, painter, x, y, size, brightness):
-        sparkle = max(1.0, size * brightness)
-        pen = QPen(QColor(255, 255, 255))
-        pen.setWidth(max(1, int(size)))
-        painter.setPen(pen)
-        painter.drawLine(int(x - sparkle), int(y), int(x + sparkle), int(y))
-        painter.drawLine(int(x), int(y - sparkle), int(x), int(y + sparkle))
+        sparkle = max(2.0, size * (1.0 + (brightness * 0.9)))
+        vertical_reach = max(3.0, sparkle * 1.7)
+        horizontal_reach = max(2.0, sparkle * 1.2)
+        inner_notch = max(1.0, sparkle * 0.42)
+        star_path = QPainterPath()
+        star_path.moveTo(x, y - vertical_reach)
+        star_path.lineTo(x + inner_notch, y - inner_notch)
+        star_path.lineTo(x + horizontal_reach, y)
+        star_path.lineTo(x + inner_notch, y + inner_notch)
+        star_path.lineTo(x, y + vertical_reach)
+        star_path.lineTo(x - inner_notch, y + inner_notch)
+        star_path.lineTo(x - horizontal_reach, y)
+        star_path.lineTo(x - inner_notch, y - inner_notch)
+        star_path.closeSubpath()
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(255, 255, 255))
-        painter.drawEllipse(QRectF(x - 1, y - 1, 2, 2))
+        painter.drawPath(star_path)
+        center_r = max(1.0, sparkle * 0.25)
+        painter.drawEllipse(QRectF(x - center_r, y - center_r, center_r * 2, center_r * 2))
 
     def _draw_background(self, painter):
         painter.fillRect(self.rect(), QColor("#15101F"))
@@ -270,11 +280,11 @@ class RocketSplashScreen(QWidget):
 
         orbit_progress = self._ease_in_out(max(0.0, min(1.0, (elapsed_sec - 0.9) / 0.9)))
         if orbit_progress > 0:
-            pen = QPen(QColor("#FFFFFF"), 6)
+            pen = QPen(QColor("#FFFFFF"), 5)
             painter.setPen(pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
-            orbit_rect = QRectF(center_x - (moon_r * 1.28), moon_y - (moon_r * 0.34), moon_r * 2.56, moon_r * 1.32)
-            painter.drawArc(orbit_rect, 210 * 16, int(260 * orbit_progress) * 16)
+            orbit_rect = QRectF(center_x - (moon_r * 1.32), moon_y - (moon_r * 0.10), moon_r * 2.64, moon_r * 1.28)
+            painter.drawArc(orbit_rect, 196 * 16, int(238 * orbit_progress) * 16)
 
         title_progress = self._ease_out_cubic(max(0.0, min(1.0, (elapsed_sec - 0.95) / 0.9)))
         if title_progress > 0:
@@ -283,7 +293,7 @@ class RocketSplashScreen(QWidget):
             title_font.setLetterSpacing(QFont.SpacingType.AbsoluteSpacing, 1.5)
             painter.setFont(title_font)
             shadow_offset = max(3, int(title_size * 0.07))
-            title_y = moon_y + (moon_r * 0.03)
+            title_y = moon_y - (moon_r * 0.23)
 
             painter.setPen(QColor("#FFFFFF"))
             painter.drawText(QRectF(0, title_y + shadow_offset, self.width(), title_size * 1.9), Qt.AlignmentFlag.AlignHCenter, "Math\nGame")
@@ -293,7 +303,7 @@ class RocketSplashScreen(QWidget):
             subtitle_font = QFont("Segoe UI", max(12, int(title_size * 0.24)), QFont.Weight.Bold)
             painter.setFont(subtitle_font)
             painter.setPen(QColor("#2E2C37"))
-            painter.drawText(QRectF(0, moon_y + (moon_r * 0.82), self.width(), 40), Qt.AlignmentFlag.AlignHCenter, "Ready for launch")
+            painter.drawText(QRectF(0, moon_y + (moon_r * 0.34), self.width(), 40), Qt.AlignmentFlag.AlignHCenter, "Ready for launch")
 
         footer_font = QFont("Segoe UI", 11, QFont.Weight.DemiBold)
         painter.setFont(footer_font)

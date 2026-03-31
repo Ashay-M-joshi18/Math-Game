@@ -1567,11 +1567,38 @@ class AsteroidMathGame:
         self.splash_starfield_size = target_size
 
     def _draw_splash_star(self, x, y, size, brightness):
-        sparkle = max(1, int(size * brightness))
-        self.canvas.create_line(x - sparkle, y, x + sparkle, y, fill="#FFFFFF", width=2)
-        self.canvas.create_line(x, y - sparkle, x, y + sparkle, fill="#FFFFFF", width=2)
-        if sparkle >= 3:
-            self.canvas.create_oval(x - 1, y - 1, x + 1, y + 1, fill="#FFFFFF", outline="")
+        sparkle = max(2, int(size * (1.0 + (brightness * 0.9))))
+        vertical_reach = max(3, int(sparkle * 1.7))
+        horizontal_reach = max(2, int(sparkle * 1.2))
+        inner_notch = max(1, int(sparkle * 0.42))
+        points = [
+            x,
+            y - vertical_reach,
+            x + inner_notch,
+            y - inner_notch,
+            x + horizontal_reach,
+            y,
+            x + inner_notch,
+            y + inner_notch,
+            x,
+            y + vertical_reach,
+            x - inner_notch,
+            y + inner_notch,
+            x - horizontal_reach,
+            y,
+            x - inner_notch,
+            y - inner_notch,
+        ]
+        self.canvas.create_polygon(points, fill="#FFFFFF", outline="", smooth=True)
+        center_r = max(1, sparkle // 4)
+        self.canvas.create_oval(
+            x - center_r,
+            y - center_r,
+            x + center_r,
+            y + center_r,
+            fill="#FFFFFF",
+            outline="",
+        )
 #Rocket drawing adapted from original by SynCraft Solution's lead designer, using a custom approach to create a playful, stylized rocket with a dynamic flame effect that scales with the animation progress.
     def _draw_splash_rocket(self, x, y, scale, flame_scale):
         body_w = int(46 * scale)
@@ -1819,24 +1846,24 @@ class AsteroidMathGame:
 
         orbit_progress = self._ease_in_out(max(0.0, min(1.0, (elapsed - 0.9) / 0.9)))
         if orbit_progress > 0:
-            orbit_extent = 260 * orbit_progress
+            orbit_extent = 238 * orbit_progress
             self.canvas.create_arc(
-                center_x - (moon_r * 1.28),
-                moon_y - (moon_r * 0.34),
-                center_x + (moon_r * 1.28),
-                moon_y + (moon_r * 0.98),
-                start=210,
+                center_x - (moon_r * 1.32),
+                moon_y - (moon_r * 0.10),
+                center_x + (moon_r * 1.32),
+                moon_y + (moon_r * 1.18),
+                start=196,
                 extent=orbit_extent,
                 style="arc",
                 outline="#FFFFFF",
-                width=6,
+                width=5,
             )
 
         title_progress = self._ease_out_cubic(max(0.0, min(1.0, (elapsed - 0.95) / 0.9)))
         if title_progress > 0:
             title_size = int(max(34, min(88, (min(width, height) * 0.078) * (0.72 + (0.28 * title_progress)))))
             shadow_offset = max(3, int(title_size * 0.07))
-            title_y = moon_y - (moon_r * 0.05)
+            title_y = moon_y - (moon_r * 0.18)
             self.canvas.create_text(
                 center_x - shadow_offset,
                 title_y + shadow_offset,
@@ -1856,7 +1883,7 @@ class AsteroidMathGame:
             subtitle_size = max(12, int(title_size * 0.26))
             self.canvas.create_text(
                 center_x,
-                moon_y + (moon_r * 0.82),
+                moon_y + (moon_r * 0.42),
                 text="Ready for launch",
                 font=(FONT_FAMILY_UI, subtitle_size, "bold"),
                 fill="#2E2C37",
@@ -1916,53 +1943,91 @@ class AsteroidMathGame:
     def _show_legacy_start_screen(self):
         self._cancel_splash_animation()
         self.game_active = False
-        # Reset any special mode flags when returning home
         self.is_t20_mode = False
         if self._start_screen_resize_job is not None:
             self.root.after_cancel(self._start_screen_resize_job)
             self._start_screen_resize_job = None
-        # Destroy everything in root before rebuilding the start screen.
         for widget in self.root.winfo_children():
             widget.destroy()
 
-        # Create a fresh, resize-aware canvas for the start screen.
-        self.canvas = tk.Canvas(
-            self.root,
-            highlightthickness=0
+        container = tk.Frame(self.root, bg=APP_BG_COLOR)
+        container.pack(fill="both", expand=True)
+
+        content = tk.Frame(
+            container,
+            bg=APP_SURFACE_COLOR,
+            highlightbackground="#38D1FF",
+            highlightthickness=2,
+            bd=0,
         )
-        self.canvas.pack(fill="both", expand=True)
-        self._bg_cache_size = None
-        self._bg_cache_photo = None
+        content.place(relx=0.5, rely=0.5, anchor="center", relwidth=0.72, relheight=0.58)
 
-        self._start_screen_widgets = {
-            "admin_btn": self._create_glossy_button(
-                text="Admin Login",
-                callback=self.admin_login,
-                width=19,
-                font=(FONT_FAMILY_UI, 16, "bold"),
-                parent=self.root,
-                variant="amber",
-            ),
-            "student_btn": self._create_glossy_button(
-                text="Student Login",
-                callback=self.student_login,
-                width=19,
-                font=(FONT_FAMILY_UI, 16, "bold"),
-                parent=self.root,
-                variant="amber",
-            ),
-            "guest_btn": self._create_glossy_button(
-                text="Guest Login (T20)",
-                callback=self.start_t20_flow,
-                width=19,
-                font=(FONT_FAMILY_UI, 16, "bold"),
-                parent=self.root,
-                variant="amber",
-            ),
-        }
+        tk.Label(
+            content,
+            text="Math Game",
+            font=(FONT_FAMILY_DISPLAY, 34, "bold"),
+            fg="#5BCBFF",
+            bg=APP_SURFACE_COLOR,
+        ).pack(pady=(28, 10))
 
-        self.canvas.bind("<Configure>", self._schedule_start_screen_layout)
-        self._layout_start_screen()
+        tk.Label(
+            content,
+            text="Qt portal is unavailable. Using the emergency launcher.",
+            font=(FONT_FAMILY_UI, 15, "bold"),
+            fg=APP_TEXT_COLOR,
+            bg=APP_SURFACE_COLOR,
+        ).pack(pady=(0, 8))
+
+        tk.Label(
+            content,
+            text="The full start screen now lives in qt_portal.py. You can still continue with the same three entry points below.",
+            font=(FONT_FAMILY_TEXT, 11),
+            fg="#D5EAFF",
+            bg=APP_SURFACE_COLOR,
+            wraplength=560,
+            justify="center",
+        ).pack(pady=(0, 22))
+
+        button_wrap = tk.Frame(content, bg=APP_SURFACE_COLOR)
+        button_wrap.pack()
+
+        for text, callback in (
+            ("Admin Login", self.admin_login),
+            ("Student Login", self.student_login),
+            ("Guest Login (T20)", self.start_t20_flow),
+        ):
+            btn = self._create_glossy_button(
+                text=text,
+                callback=callback,
+                width=19,
+                font=(FONT_FAMILY_UI, 15, "bold"),
+                parent=button_wrap,
+                variant="amber",
+            )
+            btn.pack(pady=8)
+
+        tk.Label(
+            content,
+            text="© 2026 SynCraft Solution",
+            font=(FONT_FAMILY_UI, 10),
+            fg="#89A9CA",
+            bg=APP_SURFACE_COLOR,
+        ).pack(side="bottom", pady=(0, 20))
+
+    def _handle_start_screen_selection(self, selected_action):
+        if selected_action == "admin":
+            self.admin_login()
+            return True
+        if selected_action == "student":
+            self.student_login()
+            return True
+        if selected_action == "guest":
+            self.start_t20_flow()
+            return True
+        if selected_action is None:
+            self.root.destroy()
+            return True
+        return False
 
     def show_start_screen(self):
         self._cancel_splash_animation()
@@ -1984,17 +2049,7 @@ class AsteroidMathGame:
                     except tk.TclError:
                         pass
 
-            if selected_action == "admin":
-                self.admin_login()
-                return
-            if selected_action == "student":
-                self.student_login()
-                return
-            if selected_action == "guest":
-                self.start_t20_flow()
-                return
-            if selected_action is None:
-                self.root.destroy()
+            if self._handle_start_screen_selection(selected_action):
                 return
 
         self._show_legacy_start_screen()
@@ -7150,15 +7205,15 @@ class LoginScreen(tk.Frame):
             fg="#74CFFF",
             bg=APP_SURFACE_COLOR,
         ).pack(side="left")
-        tk.Label(
-            status_row,
-            text="LIVE",
-            font=(FONT_FAMILY_UI, 9, "bold"),
-            fg="#091726",
-            bg="#7EE081",
-            padx=10,
-            pady=3,
-        ).pack(side="right")
+        # tk.Label(
+        #     status_row,
+        #     text="LIVE",
+        #     font=(FONT_FAMILY_UI, 9, "bold"),
+        #     fg="#091726",
+        #     bg="#7EE081",
+        #     padx=10,
+        #     pady=3,
+        # ).pack(side="right")
 
         tk.Label(
             form_panel,
@@ -7626,10 +7681,10 @@ if QApplication is not None:
 
             status_row.addStretch(1)
 
-            status_pill = QLabel("LIVE")
-            status_pill.setObjectName("statusPill")
-            status_row.addWidget(status_pill, 0, Qt.AlignmentFlag.AlignRight)
-            form_col.addLayout(status_row)
+            # status_pill = QLabel("LIVE")
+            # status_pill.setObjectName("statusPill")
+            # status_row.addWidget(status_pill, 0, Qt.AlignmentFlag.AlignRight)
+            # form_col.addLayout(status_row)
 
             form_title = QLabel("Welcome Back")
             form_title.setObjectName("formTitle")
@@ -7852,6 +7907,30 @@ if QApplication is not None:
             self._space_phase = (self._space_phase + 0.045) % (math.pi * 2)
             self.update()
 
+        def _draw_star(self, painter, x, y, size, brightness):
+            sparkle = max(2.0, size * (1.0 + (brightness * 0.9)))
+            vertical_reach = max(3.0, sparkle * 1.7)
+            horizontal_reach = max(2.0, sparkle * 1.2)
+            inner_notch = max(1.0, sparkle * 0.42)
+
+            star_path = QPainterPath()
+            star_path.moveTo(x, y - vertical_reach)
+            star_path.lineTo(x + inner_notch, y - inner_notch)
+            star_path.lineTo(x + horizontal_reach, y)
+            star_path.lineTo(x + inner_notch, y + inner_notch)
+            star_path.lineTo(x, y + vertical_reach)
+            star_path.lineTo(x - inner_notch, y + inner_notch)
+            star_path.lineTo(x - horizontal_reach, y)
+            star_path.lineTo(x - inner_notch, y - inner_notch)
+            star_path.closeSubpath()
+
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(QColor(255, 255, 255))
+            painter.drawPath(star_path)
+
+            center_r = max(1.0, sparkle * 0.25)
+            painter.drawEllipse(QRectF(x - center_r, y - center_r, center_r * 2, center_r * 2))
+
         def paintEvent(self, event):
             self._ensure_stars()
             painter = QPainter(self)
@@ -7980,30 +8059,7 @@ if QApplication is not None:
 
             for star in self._stars:
                 twinkle = (math.sin((self._space_phase * star["speed"]) + star["phase"]) + 1.0) / 2.0
-                glow_radius = star["r"] * (2.4 + (twinkle * 0.9))
-                glow_alpha = int(28 + (twinkle * 54))
-                core_alpha = int(170 + (twinkle * 85))
-
-                painter.setPen(Qt.PenStyle.NoPen)
-                painter.setBrush(QColor(56, 209, 255, glow_alpha))
-                painter.drawEllipse(
-                    QRectF(
-                        star["x"] - glow_radius,
-                        star["y"] - glow_radius,
-                        glow_radius * 2,
-                        glow_radius * 2,
-                    )
-                )
-
-                painter.setBrush(QColor(255, 255, 255, core_alpha))
-                painter.drawEllipse(
-                    QRectF(
-                        star["x"] - star["r"],
-                        star["y"] - star["r"],
-                        star["r"] * 2,
-                        star["r"] * 2,
-                    )
-                )
+                self._draw_star(painter, star["x"], star["y"], star["r"], twinkle)
 
 
     def run_qt_login(heading_text="Login", required_role=None):

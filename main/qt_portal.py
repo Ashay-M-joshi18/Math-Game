@@ -23,12 +23,22 @@ class PortalCard(QFrame):
     def __init__(self, badge, title, description, button_text, accent, on_click):
         super().__init__()
         self.setObjectName("portalCard")
-        self.setMinimumHeight(138)
+        self.setMinimumHeight(128)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(22, 18, 22, 18)
-        layout.setSpacing(12)
+        shell = QHBoxLayout(self)
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.setSpacing(0)
+
+        accent_bar = QFrame()
+        accent_bar.setFixedWidth(6)
+        accent_bar.setStyleSheet(f"background: {accent}; border-radius: 3px;")
+        shell.addWidget(accent_bar)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(10)
+        shell.addLayout(layout, 1)
 
         header = QHBoxLayout()
         header.setContentsMargins(0, 0, 0, 0)
@@ -36,14 +46,14 @@ class PortalCard(QFrame):
 
         badge_label = QLabel(badge)
         badge_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        badge_label.setFixedSize(34, 34)
+        badge_label.setFixedSize(36, 36)
         badge_label.setStyleSheet(
             f"""
             QLabel {{
                 background: {accent};
                 color: #102033;
-                border-radius: 17px;
-                font: 700 15px 'Segoe UI';
+                border-radius: 18px;
+                font: 700 11px 'Segoe UI';
             }}
             """
         )
@@ -51,18 +61,18 @@ class PortalCard(QFrame):
 
         text_wrap = QVBoxLayout()
         text_wrap.setContentsMargins(0, 0, 0, 0)
-        text_wrap.setSpacing(4)
+        text_wrap.setSpacing(3)
 
         title_label = QLabel(title)
         title_label.setWordWrap(True)
         title_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        title_label.setStyleSheet("color: #F6FBFF; font: 700 15px 'Segoe UI';")
+        title_label.setStyleSheet("color: #F6FBFF; font: 700 16px 'Segoe UI';")
         text_wrap.addWidget(title_label)
 
         desc_label = QLabel(description)
         desc_label.setWordWrap(True)
         desc_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        desc_label.setStyleSheet("color: #D6E9FF; font: 400 11px 'Segoe UI';")
+        desc_label.setStyleSheet("color: #AFC7DD; font: 400 10px 'Segoe UI';")
         text_wrap.addWidget(desc_label)
         header.addLayout(text_wrap, 1)
 
@@ -72,7 +82,7 @@ class PortalCard(QFrame):
         button = QPushButton(button_text)
         button.clicked.connect(on_click)
         button.setCursor(Qt.CursorShape.PointingHandCursor)
-        button.setFixedHeight(44)
+        button.setFixedHeight(40)
         button.setMinimumWidth(0)
         button.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         button.setStyleSheet(
@@ -82,8 +92,8 @@ class PortalCard(QFrame):
                     stop:0 #FFB34F, stop:0.48 #FF9727, stop:1 #D66B0F);
                 color: white;
                 border: 1px solid #FFD08A;
-                border-radius: 22px;
-                font: 700 14px 'Segoe UI';
+                border-radius: 20px;
+                font: 700 13px 'Segoe UI';
                 padding: 0 20px;
             }
             QPushButton:hover { background: #FFAA36; }
@@ -114,56 +124,56 @@ class PortalWindow(QWidget):
                 border: none;
             }
             QFrame#shell {
-                background: #1A5A89;
-                border: 2px solid #3CD1FF;
+                background: #0E4B78;
+                border: 2px solid #38D1FF;
                 border-radius: 26px;
             }
             QFrame#inner {
-                background: rgba(17, 87, 130, 0.45);
-                border: 1px solid #2B8BC0;
+                background: transparent;
+                border: 1px solid #1F77AF;
                 border-radius: 20px;
             }
             QLabel#eyebrow {
-                color: #C8F6FF;
-                background: #214E84;
-                border: 1px solid #59DAFF;
+                color: #B9F7FF;
+                background: #173C73;
+                border: 1px solid #58E1FF;
                 border-radius: 12px;
                 font: 700 12px 'Segoe UI';
                 padding: 7px 14px;
             }
             QLabel#heroTitle {
-                color: #58C7FF;
+                color: #5BCBFF;
                 font: 900 52px Impact;
             }
             QLabel#heroSub {
                 color: #F7FBFF;
-                font: 700 24px 'Segoe UI';
+                font: 700 20px 'Segoe UI';
             }
             QLabel#heroBody, QLabel#portalDesc, QLabel#heroNote {
-                color: #D6E9FF;
-                font: 400 14px 'Segoe UI';
+                color: #AFC7DD;
+                font: 400 12px 'Segoe UI';
             }
             QLabel#portalTitle {
-                color: #F7FBFF;
-                font: 700 22px 'Segoe UI';
+                color: #F6FBFF;
+                font: 700 19px 'Segoe UI';
             }
             QLabel#chip {
-                color: #F5FBFF;
-                font: 700 12px 'Segoe UI';
+                color: #DCEEFF;
+                font: 700 11px 'Segoe UI';
                 border-radius: 14px;
-                padding: 8px 14px;
+                padding: 7px 12px;
             }
             QFrame#portalCard {
-                background: #0E5C85;
+                background: #0D5B84;
                 border: 2px solid #38D1FF;
-                border-radius: 18px;
+                border-radius: 24px;
             }
             QLabel#footer {
-                color: #DFEBFF;
+                color: #C7DDF3;
                 font: 600 12px 'Segoe UI';
             }
             QLabel#footerSmall {
-                color: #A9C0E0;
+                color: #89A9CA;
                 font: 600 11px 'Segoe UI';
             }
             """
@@ -208,7 +218,7 @@ class PortalWindow(QWidget):
 
         top_line = QFrame()
         top_line.setFixedHeight(5)
-        top_line.setStyleSheet("background: #46D8FF; border-radius: 2px;")
+        top_line.setStyleSheet("background: #47D7FF; border-radius: 2px;")
         self.shell_layout.addWidget(top_line)
 
         inner = QFrame()
@@ -221,7 +231,7 @@ class PortalWindow(QWidget):
         self.hero_widget = QWidget()
         self.hero_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         hero_col = QVBoxLayout(self.hero_widget)
-        hero_col.setSpacing(12)
+        hero_col.setSpacing(10)
 
         eyebrow = QLabel("SPACE MISSION HQ")
         eyebrow.setObjectName("eyebrow")
@@ -232,23 +242,23 @@ class PortalWindow(QWidget):
         self.title_label.setObjectName("heroTitle")
         hero_col.addWidget(self.title_label, 0, Qt.AlignmentFlag.AlignLeft)
 
-        self.sub_label = QLabel("Playful number missions for young space explorers")
+        self.sub_label = QLabel("Pick a portal and start playing.")
         self.sub_label.setObjectName("heroSub")
         self.sub_label.setWordWrap(True)
         hero_col.addWidget(self.sub_label)
 
         self.body_label = QLabel(
-            "Jump into bright space portals, practise arithmetic with meteor rounds, and build confidence through quick wins and progress tracking."
+            "Fast maths practice with a simple space theme."
         )
         self.body_label.setObjectName("heroBody")
         self.body_label.setWordWrap(True)
         hero_col.addWidget(self.body_label)
 
         chip_row_1 = QHBoxLayout()
-        chip_row_1.setSpacing(12)
+        chip_row_1.setSpacing(10)
         for text, bg, border in (
-            ("Quick Drills", "#103454", "#56B6FF"),
-            ("Progress Reports", "#173149", "#FF9A3D"),
+            ("Quick Play", "#102A43", "#56B6FF"),
+            ("Track Progress", "#16233B", "#56B6FF"),
         ):
             chip = QLabel(text)
             chip.setObjectName("chip")
@@ -259,44 +269,35 @@ class PortalWindow(QWidget):
         chip_row_1.addStretch(1)
         hero_col.addLayout(chip_row_1)
 
-        chip_row_2 = QHBoxLayout()
-        chip_row_2.setSpacing(12)
-        chip = QLabel("T20 Speed Arena")
-        chip.setObjectName("chip")
-        chip.setStyleSheet("QLabel#chip { background: #0F3A4F; border: 1px solid #5CD6C5; }")
-        chip_row_2.addWidget(chip)
-        chip_row_2.addStretch(1)
-        hero_col.addLayout(chip_row_2)
-
         self.note_label = QLabel(
-            "Choose a portal to launch the same game systems with a brighter, more kid-friendly mission control look."
+            ""
         )
         self.note_label.setObjectName("heroNote")
         self.note_label.setWordWrap(True)
-        hero_col.addWidget(self.note_label)
+        self.note_label.hide()
         hero_col.addStretch(1)
 
         self.right_widget = QWidget()
         self.right_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         right_col = QVBoxLayout(self.right_widget)
-        right_col.setSpacing(14)
+        right_col.setSpacing(16)
 
         self.portal_title = QLabel("Choose your portal")
         self.portal_title.setObjectName("portalTitle")
         right_col.addWidget(self.portal_title)
 
-        self.portal_desc = QLabel("Each route keeps the same game logic. Only the mission entry point changes.")
+        self.portal_desc = QLabel("Choose how you want to enter.")
         self.portal_desc.setObjectName("portalDesc")
         self.portal_desc.setWordWrap(True)
         right_col.addWidget(self.portal_desc)
 
         cards_wrap = QVBoxLayout()
-        cards_wrap.setSpacing(14)
+        cards_wrap.setSpacing(16)
         cards_wrap.addWidget(
             PortalCard(
                 "A",
                 "Admin Login",
-                "Create student access, upload quiz banks, and review progress.",
+                "Manage students and review progress.",
                 "Admin Login",
                 "#5BB2FF",
                 lambda: self._choose("admin"),
@@ -306,7 +307,7 @@ class PortalWindow(QWidget):
             PortalCard(
                 "S",
                 "Student Login",
-                "Play missions, track profile history, and practise by level.",
+                "Practice, track scores, and improve.",
                 "Student Login",
                 "#7CD8FF",
                 lambda: self._choose("student"),
@@ -316,7 +317,7 @@ class PortalWindow(QWidget):
             PortalCard(
                 "T20",
                 "Guest Login (T20)",
-                "Jump straight into a fast T20 classroom sprint mode.",
+                "Jump into a quick T20 round.",
                 "Guest Login (T20)",
                 "#FFB15C",
                 lambda: self._choose("guest"),
@@ -377,15 +378,15 @@ class PortalWindow(QWidget):
             QFont("Impact", 32 if tight else 40 if compact else 52, QFont.Weight.Black)
         )
         self.sub_label.setFont(
-            QFont("Segoe UI", 18 if tight else 20 if compact else 24, QFont.Weight.Bold)
+            QFont("Segoe UI", 14 if tight else 16 if compact else 20, QFont.Weight.Bold)
         )
         self.portal_title.setFont(
-            QFont("Segoe UI", 18 if tight else 20 if compact else 22, QFont.Weight.Bold)
+            QFont("Segoe UI", 16 if tight else 18 if compact else 19, QFont.Weight.Bold)
         )
 
-        self.body_label.setMaximumWidth(16777215 if compact else 420)
-        self.note_label.setMaximumWidth(16777215 if compact else 420)
-        self.portal_desc.setMaximumWidth(16777215 if compact else 380)
+        self.body_label.setMaximumWidth(16777215 if compact else 360)
+        self.note_label.setMaximumWidth(16777215 if compact else 360)
+        self.portal_desc.setMaximumWidth(16777215 if compact else 300)
         self.shell.setMaximumWidth(16777215 if compact else 1120)
         minimum_shell_height = 560 if compact else 610
         self.shell.setMinimumHeight(minimum_shell_height)
@@ -429,6 +430,16 @@ class PortalWindow(QWidget):
         self._space_phase = (self._space_phase + 0.045) % (math.pi * 2)
         self.update()
 
+    def _draw_star(self, painter, x, y, size, brightness):
+        glow_radius = size * (2.4 + (brightness * 0.9))
+        glow_alpha = int(28 + (brightness * 54))
+        core_alpha = int(170 + (brightness * 85))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(56, 209, 255, glow_alpha))
+        painter.drawEllipse(QRectF(x - glow_radius, y - glow_radius, glow_radius * 2, glow_radius * 2))
+        painter.setBrush(QColor(255, 255, 255, core_alpha))
+        painter.drawEllipse(QRectF(x - size, y - size, size * 2, size * 2))
+
     def paintEvent(self, event):
         self._ensure_stars()
         painter = QPainter(self)
@@ -467,6 +478,12 @@ class PortalWindow(QWidget):
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawEllipse(QRectF(86 + saturn_dx, 136 + saturn_dy, 330, 112))
 
+        # Draw the rear ring arc first so the planet sits between the two halves.
+        ring_pen_back = QPen(QColor(255, 255, 255, 58))
+        ring_pen_back.setWidth(10)
+        painter.setPen(ring_pen_back)
+        painter.drawArc(QRectF(86 + saturn_dx, 136 + saturn_dy, 330, 112), 18 * 16, 144 * 16)
+
         painter.setPen(Qt.PenStyle.NoPen)
 
         saturn = QRadialGradient(256 + saturn_dx, 160 + saturn_dy, 140, 212 + saturn_dx, 124 + saturn_dy)
@@ -488,11 +505,6 @@ class PortalWindow(QWidget):
             QRectF(188 + saturn_dx, 238 + saturn_dy, 112, 18),
         ):
             painter.drawEllipse(rect)
-
-        ring_pen_back = QPen(QColor(255, 255, 255, 58))
-        ring_pen_back.setWidth(10)
-        painter.setPen(ring_pen_back)
-        painter.drawArc(QRectF(86 + saturn_dx, 136 + saturn_dy, 330, 112), 18 * 16, 144 * 16)
 
         mars = QRadialGradient(
             self.width() - 180 + mars_dx,
@@ -547,25 +559,7 @@ class PortalWindow(QWidget):
 
         for star in self._stars:
             twinkle = (math.sin((self._space_phase * star["speed"]) + star["phase"]) + 1.0) / 2.0
-            glow_radius = star["r"] * (2.4 + (twinkle * 0.9))
-            glow_alpha = int(28 + (twinkle * 54))
-            core_alpha = int(170 + (twinkle * 85))
-
-            painter.setPen(Qt.PenStyle.NoPen)
-            painter.setBrush(QColor(56, 209, 255, glow_alpha))
-            painter.drawEllipse(
-                QRectF(
-                    star["x"] - glow_radius,
-                    star["y"] - glow_radius,
-                    glow_radius * 2,
-                    glow_radius * 2,
-                )
-            )
-
-            painter.setBrush(QColor(255, 255, 255, core_alpha))
-            painter.drawEllipse(
-                QRectF(star["x"] - star["r"], star["y"] - star["r"], star["r"] * 2, star["r"] * 2)
-            )
+            self._draw_star(painter, star["x"], star["y"], star["r"], twinkle)
 
         painter.setBrush(QColor("#38D1FF"))
         for x, y, r in (
