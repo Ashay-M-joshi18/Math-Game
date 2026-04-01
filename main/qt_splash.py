@@ -320,7 +320,7 @@ def run_qt_splash(duration_ms=2800):
     screen = app.primaryScreen()
     if screen is not None:
         splash.set_screen_geometry(screen.geometry())
-        splash.showFullScreen()
+        splash.showMaximized()
     else:
         splash.show()
     splash.raise_()

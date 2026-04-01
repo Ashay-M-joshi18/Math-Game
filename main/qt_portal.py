@@ -594,14 +594,7 @@ def run_qt_portal():
     app.setQuitOnLastWindowClosed(False)
 
     portal = PortalWindow()
-    screen = app.primaryScreen()
-    if screen is not None:
-        geometry = screen.availableGeometry()
-        portal.move(
-            geometry.center().x() - (portal.width() // 2),
-            geometry.center().y() - (portal.height() // 2),
-        )
-    portal.show()
+    portal.showMaximized()
     portal.raise_()
     portal.activateWindow()
 

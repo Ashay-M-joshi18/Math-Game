@@ -6,10 +6,8 @@ import os
 import time
 import math
 from PIL.ImageChops import screen
-from dotenv import load_dotenv
 os.environ.setdefault("PYGAME_HIDE_SUPPORT_PROMPT", "1")
 import pygame
-load_dotenv()
 import sys
 import random
 import csv
@@ -360,10 +358,9 @@ class AsteroidMathGame:
         self.font = pygame.font.SysFont("Arial", 30)
         self.root.title("Math Game")
         self.root.geometry("600x800")
-        try:
-            self.root.state("zoomed")
-        except tk.TclError:
-            pass
+        self._ensure_root_viewport()
+        self.root.bind("<F11>", self._toggle_window_viewport, add="+")
+        self.root.bind("<Escape>", self._exit_viewport_cover, add="+")
         self.splash_animation_job = None
         self.splash_finish_job = None
         self.splash_started_at = None
@@ -396,8 +393,8 @@ class AsteroidMathGame:
         self._bg_cache_size = None
         self._bg_cache_photo = None
 
-        self.canvas = tk.Canvas(root, width=600, height=800, highlightthickness=0, bg=SPLASH_BG_COLOR)
-        self.canvas.pack()
+        self.canvas = tk.Canvas(root, highlightthickness=0, bg=SPLASH_BG_COLOR)
+        self.canvas.pack(fill="both", expand=True)
 
         # Game State
         self.asteroids = []
@@ -439,6 +436,48 @@ class AsteroidMathGame:
         self.load_default_advanced_questions()
         
         self.show_start_screen()
+
+    def _ensure_root_viewport(self):
+        """Use maximized viewport mode (not true fullscreen) across transitions."""
+        if not self.root or not self.root.winfo_exists():
+            return
+        try:
+            self.root.attributes("-fullscreen", False)
+        except tk.TclError:
+            pass
+        try:
+            self.root.state("zoomed")
+        except tk.TclError:
+            pass
+
+    def _toggle_window_viewport(self, _event=None):
+        """Toggle between normal window and maximized viewport mode."""
+        if not self.root or not self.root.winfo_exists():
+            return "break"
+        try:
+            self.root.attributes("-fullscreen", False)
+        except tk.TclError:
+            pass
+        try:
+            current_state = str(self.root.state())
+            self.root.state("normal" if current_state == "zoomed" else "zoomed")
+        except tk.TclError:
+            pass
+        return "break"
+
+    def _exit_viewport_cover(self, _event=None):
+        """Ensure users can always leave covered-screen mode quickly."""
+        if not self.root or not self.root.winfo_exists():
+            return "break"
+        try:
+            self.root.attributes("-fullscreen", False)
+        except tk.TclError:
+            pass
+        try:
+            self.root.state("normal")
+        except tk.TclError:
+            pass
+        return "break"
 
     # -------- Advanced Maths questions loading helpers --------
 
@@ -526,9 +565,10 @@ class AsteroidMathGame:
         self._cancel_splash_animation()
         self._cancel_game_start_countdown()
         self._cancel_screen_shake()
+        self._ensure_root_viewport()
         for widget in self.root.winfo_children():
             widget.destroy()
-        self.canvas = tk.Canvas(self.root, width=600, height=800, highlightthickness=0, bg=APP_BG_COLOR)
+        self.canvas = tk.Canvas(self.root, highlightthickness=0, bg=APP_BG_COLOR)
         self.canvas.pack(fill="both", expand=True)
 
     # -------- Button sound effect wrappers --------
@@ -1343,6 +1383,7 @@ class AsteroidMathGame:
             finally:
                 if self.root.winfo_exists():
                     self.root.deiconify()
+                    self._ensure_root_viewport()
                     try:
                         self.root.lift()
                         self.root.focus_force()
@@ -1369,6 +1410,7 @@ class AsteroidMathGame:
         finally:
             if self.root.winfo_exists():
                 self.root.deiconify()
+                self._ensure_root_viewport()
                 try:
                     self.root.lift()
                     self.root.focus_force()
@@ -1674,20 +1716,20 @@ class AsteroidMathGame:
         manage_window.resizable(True, True)
         manage_window.transient(self.root)
         manage_window.grab_set()
-        color_bg = "#EEF3F9"
-        color_surface = "#FFFFFF"
-        color_surface_soft = "#F6F9FD"
-        color_text = "#13253F"
-        color_muted = "#5C6F8A"
-        color_border = "#D7E1EF"
-        color_primary = "#2F6FB4"
-        color_primary_active = "#285F99"
+        color_bg = "#07111F"
+        color_surface = "#0D1A2C"
+        color_surface_soft = "#12243A"
+        color_text = "#F4F8FF"
+        color_muted = "#8EA6C1"
+        color_border = "#1D3652"
+        color_primary = "#2E7CFF"
+        color_primary_active = "#235FCA"
         color_success = APP_ACCENT_COLOR
-        color_success_active = "#439A46"
-        color_danger = "#C64A4A"
-        color_danger_active = "#A23D3D"
-        color_neutral = "#4E607A"
-        color_neutral_active = "#44556D"
+        color_success_active = "#D96E14"
+        color_danger = "#C95D4A"
+        color_danger_active = "#A44637"
+        color_neutral = "#17314A"
+        color_neutral_active = "#214767"
         manage_window.configure(bg=color_bg)
 
         wrapper = tk.Frame(manage_window, bg=color_bg, padx=16, pady=14)
@@ -2025,14 +2067,16 @@ class AsteroidMathGame:
         canvas_h = self.canvas.winfo_height()
         if canvas_h <= 1:
             canvas_h = 800
-        center_x = self._sx(300)
+        center_x = canvas_w // 2
+        hud_top = max(42, int(canvas_h * 0.07))
+        is_compact = canvas_w < 820
 
         if self.timer_label is None:
             elapsed_time = int(time.time() - self.quiz_start_time) if self.quiz_start_time else 0
             timer_mins, timer_secs = divmod(elapsed_time, 60)
             timer_text = f"{timer_mins:02}:{timer_secs:02}"
-            timer_center_x = self._sx(520)
-            timer_center_y = 60
+            timer_center_x = center_x if is_compact else (canvas_w - max(84, int(canvas_w * 0.12)))
+            timer_center_y = hud_top + (48 if is_compact else 0)
             timer_box_w = max(130, int(150 * self._canvas_scale_y()))
             timer_box_h = max(44, int(54 * self._canvas_scale_y()))
             box_x1 = timer_center_x - (timer_box_w // 2)
@@ -2068,15 +2112,15 @@ class AsteroidMathGame:
             # Static header/HUD gets created once.
             self.canvas.create_text(
                 center_x,
-                60,
+                hud_top,
                 text="Advance Maths Quiz",
-                font=(FONT_FAMILY_UI, 22, "bold"),
+                font=(FONT_FAMILY_UI, 20 if is_compact else 22, "bold"),
                 fill="white",
                 tags=("advanced_static",),
             )
             self.advanced_question_counter_item = self.canvas.create_text(
                 center_x,
-                100,
+                hud_top + (38 if is_compact else 40),
                 text="",
                 font=(FONT_FAMILY_UI, 14),
                 fill="#E0E0E0",
@@ -2084,14 +2128,18 @@ class AsteroidMathGame:
             )
             self.advanced_score_item = self.canvas.create_text(
                 center_x,
-                130,
+                hud_top + (66 if is_compact else 70),
                 text="",
                 font=(FONT_FAMILY_UI, 14),
                 fill="#E0E0E0",
                 tags=("advanced_static",),
             )
 
-            bar_x1, bar_y1, bar_x2, bar_y2 = self._sx(100), 150, self._sx(500), 170
+            bar_w = max(340, min(620, int(canvas_w * 0.48)))
+            bar_x1 = center_x - (bar_w // 2)
+            bar_x2 = center_x + (bar_w // 2)
+            bar_y1 = hud_top + (84 if is_compact else 90)
+            bar_y2 = bar_y1 + 20
             self.canvas.create_rectangle(
                 bar_x1,
                 bar_y1,
@@ -2117,7 +2165,7 @@ class AsteroidMathGame:
                 width=18,
             )
             self.advanced_back_button = back_btn
-            self.advanced_back_y = min(640, canvas_h - 45)
+            self.advanced_back_y = max(120, canvas_h - 44)
             self.canvas.create_window(
                 center_x,
                 self.advanced_back_y,
@@ -2146,7 +2194,11 @@ class AsteroidMathGame:
         )
 
         progress = (self.current_advanced_index + 1) / total
-        bar_x1, bar_y1, bar_x2, bar_y2 = self._sx(100), 150, self._sx(500), 170
+        bar_w = max(340, min(620, int(canvas_w * 0.48)))
+        bar_x1 = center_x - (bar_w // 2)
+        bar_x2 = center_x + (bar_w // 2)
+        bar_y1 = hud_top + (84 if is_compact else 90)
+        bar_y2 = bar_y1 + 20
         self.canvas.coords(
             self.advanced_progress_fill_item,
             bar_x1,
@@ -2156,10 +2208,10 @@ class AsteroidMathGame:
         )
 
         # Dynamic question layout: long questions get more vertical room automatically.
-        question_wrap = max(360, min(560, int(canvas_w * 0.72)))
+        question_wrap = max(360, min(760, int(canvas_w * 0.72)))
         self.advanced_question_item = self.canvas.create_text(
             center_x,
-            200,
+            bar_y2 + 28,
             text=q_data["question"],
             font=(FONT_FAMILY_UI, 16, "bold"),
             fill="white",
@@ -2169,7 +2221,7 @@ class AsteroidMathGame:
         )
         bbox = self.canvas.bbox(self.advanced_question_item)
         q_bottom = bbox[3] if bbox else 250
-        option_start_y = max(290, q_bottom + 24)
+        option_start_y = max(bar_y2 + 84, q_bottom + 24)
         back_y = min(self.advanced_back_y, canvas_h - 45)
 
         option_count = len(q_data["options"])
@@ -2178,8 +2230,8 @@ class AsteroidMathGame:
         option_step = max(option_button_height + 10, available_span // max(1, option_count))
 
         option_font_size = 14 if len(q_data["question"]) < 120 else 13
-        option_width_chars = max(24, min(34, int((canvas_w * 0.62) / 10)))
-        option_wrap = max(280, min(460, int(canvas_w * 0.62)))
+        option_wrap = max(320, min(620, int(canvas_w * 0.60)))
+        option_width_chars = max(24, min(42, int(option_wrap / 10)))
         first_option_center_y = option_start_y + (option_button_height // 2)
         options_bottom = first_option_center_y + ((option_count - 1) * option_step) + (option_button_height // 2)
         self.advanced_feedback_y = min(back_y - 35, options_bottom + 28)
@@ -2238,7 +2290,7 @@ class AsteroidMathGame:
             feedback_color = "#e74c3c"
 
         self.advanced_feedback_item = self.canvas.create_text(
-            self._sx(300),
+            (self.canvas.winfo_width() // 2) if self.canvas.winfo_exists() else self._sx(300),
             self.advanced_feedback_y,
             text=feedback_text,
             font=(FONT_FAMILY_UI, 14, "bold"),
@@ -2565,12 +2617,22 @@ class AsteroidMathGame:
         canvas_w = self.canvas.winfo_width()
         if canvas_w <= 1:
             canvas_w = 600
+        canvas_h = self.canvas.winfo_height()
+        if canvas_h <= 1:
+            canvas_h = 800
         center_x = canvas_w // 2
-        self.canvas.create_text(center_x, 100, text="Select Challenge Mode", font=(FONT_FAMILY_UI, 25, "bold"), fill="white")
+        title_y = max(90, int(canvas_h * 0.20))
+        start_y = max(210, int(canvas_h * 0.40))
+        spacing = max(82, int(canvas_h * 0.12))
+        self.canvas.create_text(
+            center_x,
+            title_y,
+            text="Select Challenge Mode",
+            font=(FONT_FAMILY_UI, max(22, int(canvas_h * 0.032)), "bold"),
+            fill="white",
+        )
 
         levels = [("Easy", "green"), ("Intermediate", "amber"), ("Expert", "blue")]
-        start_y = 250
-        spacing = 100
         for i, (lvl, variant) in enumerate(levels):
             btn = self._create_glossy_button(
                 text=lvl,
@@ -2590,7 +2652,8 @@ class AsteroidMathGame:
             variant=NAV_BACK_GLOSSY_VARIANT,
         )
         last_level_y = start_y + ((len(levels) - 1) * spacing)
-        self.canvas.create_window(center_x, last_level_y + 90, window=back_btn)
+        back_y = min(canvas_h - 80, last_level_y + max(80, int(canvas_h * 0.11)))
+        self.canvas.create_window(center_x, back_y, window=back_btn)
 
     def select_level(self, lvl):
         self.selected_level = lvl
@@ -2604,8 +2667,20 @@ class AsteroidMathGame:
         canvas_w = self.canvas.winfo_width()
         if canvas_w <= 1:
             canvas_w = 600
+        canvas_h = self.canvas.winfo_height()
+        if canvas_h <= 1:
+            canvas_h = 800
         center_x = canvas_w // 2
-        self.canvas.create_text(center_x, 100, text="Select Time Control", font=(FONT_FAMILY_UI, 25, "bold"), fill="white")
+        title_y = max(90, int(canvas_h * 0.20))
+        start_y = max(210, int(canvas_h * 0.40))
+        spacing = max(82, int(canvas_h * 0.12))
+        self.canvas.create_text(
+            center_x,
+            title_y,
+            text="Select Time Control",
+            font=(FONT_FAMILY_UI, max(22, int(canvas_h * 0.032)), "bold"),
+            fill="white",
+        )
 
         # 1. Define the time mapping based on your new requirements
         time_data = {
@@ -2624,8 +2699,6 @@ class AsteroidMathGame:
             (f"Bullet ({level_times['Bullet']})", "Bullet")
         ]
 
-        start_y = 250
-        spacing = 100
         for i, (label, mode_val) in enumerate(modes):
             btn = self._create_glossy_button(
                 text=label,
@@ -2645,7 +2718,8 @@ class AsteroidMathGame:
             variant=NAV_BACK_GLOSSY_VARIANT,
         )
         last_mode_y = start_y + ((len(modes) - 1) * spacing)
-        self.canvas.create_window(center_x, last_mode_y + 90, window=back_btn)
+        back_y = min(canvas_h - 80, last_mode_y + max(80, int(canvas_h * 0.11)))
+        self.canvas.create_window(center_x, back_y, window=back_btn)
 
 
     def select_level(self, lvl):
@@ -3118,6 +3192,14 @@ class AsteroidMathGame:
         )
         
         # Buttons
+        lane_w = max(500, min(760, int(canvas_w * 0.84)))
+        lane_x1 = (canvas_w - lane_w) // 2
+        button_x_positions = [
+            lane_x1 + int(lane_w * 0.14),
+            lane_x1 + int(lane_w * 0.38),
+            lane_x1 + int(lane_w * 0.62),
+            lane_x1 + int(lane_w * 0.86),
+        ]
         answer_y = int(max(self._sy(560), min(self._sy(720), canvas_h - self._sy(70))))
         self.answer_y = answer_y
         self.asteroid_miss_y = max(self._sy(650), answer_y - self._sy(40))
@@ -3154,7 +3236,7 @@ class AsteroidMathGame:
             btn.bind("<Enter>", lambda event: _set_answer_hover_state(event, True))
             btn.bind("<Leave>", lambda event: _set_answer_hover_state(event, False))
             self.canvas.create_window(
-                self._sx(100 + (i * 130)),
+                button_x_positions[i],
                 answer_y,
                 window=btn,
                 tags=(self.gameplay_canvas_tag,),
@@ -3936,7 +4018,14 @@ class AsteroidMathGame:
             except Exception:
                 pass
         q_text, ans, opts = MathFactory.generate_question(self.selected_op, num_range)
-        x_pos = random.randint(self._sx(50), self._sx(500))
+        self.root.update_idletasks()
+        canvas_w = self.canvas.winfo_width() if self.canvas.winfo_exists() else 600
+        if canvas_w <= 1:
+            canvas_w = 600
+        lane_w = max(500, min(760, int(canvas_w * 0.84)))
+        lane_x1 = (canvas_w - lane_w) // 2
+        lane_x2 = lane_x1 + lane_w
+        x_pos = random.randint(lane_x1 + 10, lane_x2 - 90)
         center_x = x_pos + 40
         center_y = -20
 
@@ -4291,19 +4380,18 @@ class AsteroidMathGame:
         canvas_w = max(canvas.winfo_width(), 600)
         canvas_h = max(canvas.winfo_height(), 800)
         center_x = canvas_w // 2
-
-        card_w = max(500, min(780, int(canvas_w * 0.70)))
-        card_h = max(500, min(620, int(canvas_h * 0.68)))
+        card_w = max(560, min(1080, int(canvas_w * 0.80)))
+        card_h = max(460, min(760, int(canvas_h * 0.82)))
         card_x1 = center_x - (card_w // 2)
         card_x2 = center_x + (card_w // 2)
-        card_y1 = max(40, (canvas_h - card_h) // 2)
+        card_y1 = (canvas_h - card_h) // 2
         card_y2 = card_y1 + card_h
 
         canvas.create_rectangle(
-            card_x1 - 5,
-            card_y1 - 5,
-            card_x2 + 5,
-            card_y2 + 5,
+            card_x1 - 4,
+            card_y1 - 4,
+            card_x2 + 4,
+            card_y2 + 4,
             fill="#0A1A2B",
             outline="#2D89D3",
             width=2,
@@ -4318,28 +4406,28 @@ class AsteroidMathGame:
             width=2,
         )
         canvas.create_rectangle(
-            card_x1 + 22,
-            card_y1 + 20,
-            card_x2 - 22,
-            card_y1 + 30,
+            card_x1 + 20,
+            card_y1 + 16,
+            card_x2 - 20,
+            card_y1 + 24,
             fill="#59B9EC",
             outline="",
         )
 
-        heading_size = max(20, min(34, int(card_h * 0.060)))
-        subheading_size = max(14, min(19, int(card_h * 0.034)))
-        body_size = max(11, min(15, int(card_h * 0.026)))
+        heading_size = max(24, min(42, int(card_h * 0.08)))
+        subheading_size = max(15, min(22, int(card_h * 0.042)))
+        body_wrap = max(420, card_w - 110)
 
         canvas.create_text(
             center_x,
-            card_y1 + int(card_h * 0.10),
+            card_y1 + int(card_h * 0.11),
             text="T20 Student Challenge" if is_student_t20 else "T20 Guest Challenge",
             font=(FONT_FAMILY_DISPLAY, heading_size, "bold"),
             fill="white",
         )
         canvas.create_text(
             center_x,
-            card_y1 + int(card_h * 0.16),
+            card_y1 + int(card_h * 0.17),
             text="How it works",
             font=(FONT_FAMILY_UI, subheading_size, "bold"),
             fill="#9CC6E8",
@@ -4358,59 +4446,63 @@ class AsteroidMathGame:
             "7. Final screen shows your score for each round."
         )
 
-        text_x = card_x1 + 46
-        start_y = card_y1 + int(card_h * 0.24)
-        canvas.create_text(
-            text_x,
-            start_y,
-            text=instructions_text,
-            font=(FONT_FAMILY_UI, body_size),
-            fill="#E2ECF7",
-            anchor="nw",
-            width=card_w - 92,
-            justify="left",
-        )
+        text_top_y = card_y1 + int(card_h * 0.23)
+        buttons_band_h = max(90, int(card_h * 0.17))
+        text_bottom_limit = card_y2 - buttons_band_h - 20
+        body_size = max(11, min(18, int(card_h * 0.033)))
+        text_item = None
 
-        canvas.create_line(
-            card_x1 + 26,
-            card_y2 - 120,
-            card_x2 - 26,
-            card_y2 - 120,
-            fill="#244A72",
-            width=1,
-        )
+        while body_size >= 10:
+            if text_item is not None:
+                canvas.delete(text_item)
+            text_item = canvas.create_text(
+                card_x1 + 44,
+                text_top_y,
+                text=instructions_text,
+                font=(FONT_FAMILY_UI, body_size),
+                fill="#E2ECF7",
+                anchor="nw",
+                width=body_wrap,
+                justify="left",
+            )
+            bbox = canvas.bbox(text_item)
+            if bbox and bbox[3] <= text_bottom_limit:
+                break
+            body_size -= 1
 
-        btn_frame = tk.Frame(self.root, bg="#10243A")
+        divider_y = text_bottom_limit + 8
+        canvas.create_line(card_x1 + 24, divider_y, card_x2 - 24, divider_y, fill="#244A72", width=1)
 
+        btn_row = tk.Frame(self.root, bg="#10243A")
         begin_btn = tk.Button(
-            btn_frame,
+            btn_row,
             text="Start T20",
             font=(FONT_FAMILY_UI, 14, "bold"),
-            width=15,
+            width=14,
             bg="#3FAE4D",
             fg="white",
             activebackground="#2E8B3A",
             activeforeground="white",
             relief="flat",
             bd=0,
-            padx=10,
+            padx=12,
             pady=8,
             cursor="hand2",
             command=lambda: self._play_button_and_execute(self.show_t20_difficulty_selection),
         )
-        begin_btn.pack(side="left", padx=(0, 10))
+        begin_btn.pack(side="left", padx=(0, 12))
 
         back_btn = self._create_back_button(
             text="Back",
             callback=self.show_operation_screen if is_student_t20 else self.show_start_screen,
-            width=15,
+            width=14,
             font=(FONT_FAMILY_UI, 14, "bold"),
-            parent=btn_frame,
+            parent=btn_row,
         )
         back_btn.configure(
             relief="flat",
             bd=0,
-            padx=10,
+            padx=12,
             pady=8,
             bg="#2A3B57",
             fg="#E6EDFF",
@@ -4418,32 +4510,45 @@ class AsteroidMathGame:
             activeforeground="white",
             cursor="hand2",
         )
-        back_btn.pack(side="left", padx=(10, 0))
+        back_btn.pack(side="left")
 
-        canvas.create_window(center_x, card_y2 - 78, window=btn_frame)
+        btn_y = card_y2 - max(34, int(buttons_band_h * 0.48))
+        canvas.create_window(center_x, btn_y, window=btn_row)
 
     def show_t20_difficulty_selection(self):
         self.clear_screen()
         self.draw_bg()
-        center_x = self._sx(300)
+        self.root.update_idletasks()
+        canvas_w = max(self.canvas.winfo_width(), 600)
+        canvas_h = max(self.canvas.winfo_height(), 800)
+        center_x = canvas_w // 2
         is_student_t20 = getattr(self, "t20_session_mode", "guest") == "student"
         level_callback = self.set_t20_level_student if is_student_t20 else self.set_t20_level_guest
         back_callback = self.show_operation_screen if is_student_t20 else self.show_start_screen
-        
-        self.canvas.create_text(center_x, 150, text="Select Challenge Mode", 
-                                font=(FONT_FAMILY_DISPLAY, 36, "bold"), fill="white")
+
+        title_y = max(110, int(canvas_h * 0.22))
+        first_btn_y = max(220, int(canvas_h * 0.45))
+        gap_y = max(90, int(canvas_h * 0.15))
+
+        self.canvas.create_text(
+            center_x,
+            title_y,
+            text="Select Challenge Mode",
+            font=(FONT_FAMILY_DISPLAY, max(28, int(canvas_h * 0.045)), "bold"),
+            fill="white",
+        )
         
         # Easy Button
         easy_btn = tk.Button(self.root, text="EASY (28 Qs)", font=(FONT_FAMILY_UI, 18, "bold"),
                              width=15, height=2, bg="#4CAF50", fg="white",
                              command=lambda: self._play_button_and_execute(lambda: level_callback("easy")))
-        self.canvas.create_window(center_x, 300, window=easy_btn)
+        self.canvas.create_window(center_x, first_btn_y, window=easy_btn)
         
         # Hard Button
         hard_btn = tk.Button(self.root, text="HARD (56 Qs)", font=(FONT_FAMILY_UI, 18, "bold"),
                              width=15, height=2, bg="#e74c3c", fg="white",
                              command=lambda: self._play_button_and_execute(lambda: level_callback("hard")))
-        self.canvas.create_window(center_x, 420, window=hard_btn)
+        self.canvas.create_window(center_x, first_btn_y + gap_y, window=hard_btn)
         
         # Back Button
         back_btn = self._create_back_button(
@@ -4452,7 +4557,8 @@ class AsteroidMathGame:
             width=12,
             font=(FONT_FAMILY_TEXT, 13, "bold"),
         )
-        self.canvas.create_window(center_x, 550, window=back_btn)
+        back_y = min(canvas_h - 90, first_btn_y + (2 * gap_y))
+        self.canvas.create_window(center_x, back_y, window=back_btn)
 
     def set_t20_level_guest(self, level):
         self.t20_session_mode = "guest"
@@ -4508,7 +4614,18 @@ class AsteroidMathGame:
         self.update_t20_clock()
 
     def show_t20_test_screen(self):
-        center_x = self._sx(300)
+        self.root.update_idletasks()
+        canvas_w = self.canvas.winfo_width() if self.canvas.winfo_exists() else 600
+        canvas_h = self.canvas.winfo_height() if self.canvas.winfo_exists() else 800
+        if canvas_w <= 1:
+            canvas_w = 600
+        if canvas_h <= 1:
+            canvas_h = 800
+        center_x = canvas_w // 2
+        hud_top = max(34, int(canvas_h * 0.06))
+        content_w = max(500, min(760, int(canvas_w * 0.80)))
+        content_x1 = center_x - (content_w // 2)
+        content_x2 = center_x + (content_w // 2)
         max_q = 28 if getattr(self, "t20_level", "easy") == "easy" else 56
         next_q = min(getattr(self, "t20_q_count", 0) + 1, max_q)
 
@@ -4518,7 +4635,7 @@ class AsteroidMathGame:
 
             self.canvas.create_text(
                 center_x,
-                30,
+                hud_top,
                 text=f"T20 Test: {self.current_op}",
                 font=(FONT_FAMILY_UI, 22, "bold"),
                 fill="white",
@@ -4531,21 +4648,22 @@ class AsteroidMathGame:
                 width=8,
                 font=(FONT_FAMILY_UI, 12, "bold"),
             )
-            self.canvas.create_window(self._sx(60), 30, window=exit_btn, tags=("t20_static",))
+            self.canvas.create_window(max(70, int(canvas_w * 0.09)), hud_top, window=exit_btn, tags=("t20_static",))
 
             mins, secs = divmod(self.t20_time_left, 60)
             self.t20_ui_timer = self.canvas.create_text(
-                self._sx(80),
-                70,
+                content_x1 + 24,
+                hud_top + 36,
                 text=f"{mins}:{secs:02d}",
                 font=(FONT_FAMILY_MONO, 16, "bold"),
                 fill="red",
+                anchor="w",
                 tags=("t20_static",),
             )
 
             self.t20_ui_score = self.canvas.create_text(
                 center_x,
-                100,
+                hud_top + 66,
                 text=f"Round Score: {self.t20_current_score}",
                 font=(FONT_FAMILY_MONO, 20, "bold"),
                 fill="gold",
@@ -4560,8 +4678,8 @@ class AsteroidMathGame:
             self.canvas.itemconfig(self.t20_ui_progress, text=progress_text)
         except Exception:
             self.t20_ui_progress = self.canvas.create_text(
-                self._sx(510),
-                70,
+                content_x2 - 24,
+                hud_top + 36,
                 text=progress_text,
                 font=(FONT_FAMILY_MONO, 16, "bold"),
                 fill="white",
@@ -4575,23 +4693,34 @@ class AsteroidMathGame:
         diff_config = self.adjust_t20_difficulty(self.t20_q_count)
         # Use the NEW dedicated function for T20
         q_text, self.t20_correct_ans, opts = MathFactory.generate_t20_question(diff_config)
+        question_y = hud_top + 132
+        option_start_y = question_y + 90
+        option_gap = max(58, int(canvas_h * 0.085))
+        option_width_chars = max(24, min(44, int(content_w / 10)))
+        option_wrap = max(320, min(640, int(content_w * 0.90)))
         self.canvas.create_text(
             center_x,
-            180,
+            question_y,
             text=q_text,
-            font=(FONT_FAMILY_UI, 26, "bold"),
+            font=(FONT_FAMILY_UI, max(20, min(28, int(canvas_h * 0.035))), "bold"),
             fill="white",
-            width=500,
+            width=max(380, int(content_w * 0.90)),
             tags=("t20_dynamic",),
         )
 
         # MCQ Buttons (aligned as per your 2nd image)
         for i, opt in enumerate(opts):
-            btn = tk.Button(self.root, text=str(opt), font=(FONT_FAMILY_UI, 14), width=35,
+            btn = tk.Button(self.root, text=str(opt), font=(FONT_FAMILY_UI, 14), width=option_width_chars,
                             bg="#263238", fg="white", activebackground="#455A64",
                             command=lambda o=opt: (sound_manager.play_pop_sound(), self.process_t20_answer(o)))
             self.t20_option_buttons.append(btn)
-            self.canvas.create_window(center_x, 280 + (i * 70), window=btn, tags=("t20_dynamic",))
+            self.canvas.create_window(
+                center_x,
+                option_start_y + (i * option_gap),
+                window=btn,
+                width=option_wrap,
+                tags=("t20_dynamic",),
+            )
 
     def _clear_t20_dynamic_widgets(self):
         for btn in getattr(self, "t20_option_buttons", []):
@@ -7374,14 +7503,7 @@ if QApplication is not None:
         app.setQuitOnLastWindowClosed(False)
 
         login_window = QtLoginWindow(heading_text=heading_text, required_role=required_role)
-        screen = app.primaryScreen()
-        if screen is not None:
-            geometry = screen.availableGeometry()
-            login_window.move(
-                geometry.center().x() - (login_window.width() // 2),
-                geometry.center().y() - (login_window.height() // 2),
-            )
-        login_window.show()
+        login_window.showMaximized()
         login_window.raise_()
         login_window.activateWindow()
 
@@ -7398,6 +7520,9 @@ else:
 
 
 QT_ADMIN_PANEL_STYLES = """
+QDialog {
+    background: #07111F;
+}
 QWidget {
     color: #F4F7FF;
     font-family: 'Exo 2';
@@ -7633,6 +7758,7 @@ if QApplication is not None:
     class _QtAdminBaseDialog(QDialog):
         def __init__(self, parent=None):
             super().__init__(parent)
+            self.setObjectName("adminDialog")
             self.setStyleSheet(QT_ADMIN_PANEL_STYLES)
             self.setModal(True)
 
@@ -8953,7 +9079,9 @@ if QApplication is not None:
             self.center_scroll.verticalScrollBar().setValue(0)
 
         def _focus_create_student(self):
-            self._scroll_to_top()
+            QApplication.processEvents()
+            target_y = max(0, self.add_student_card.y() - 18)
+            self.center_scroll.verticalScrollBar().setValue(target_y)
             self.student_name_edit.setFocus()
 
         def _focus_admin_account(self):
@@ -9288,14 +9416,7 @@ if QApplication is not None:
                 root_hidden = False
 
         window = QtAdminPanelWindow(root, user, handle_logout, handle_upload)
-        screen = app.primaryScreen()
-        if screen is not None:
-            geometry = screen.availableGeometry()
-            window.move(
-                geometry.center().x() - (window.width() // 2),
-                geometry.center().y() - (window.height() // 2),
-            )
-        window.show()
+        window.showMaximized()
         window.raise_()
         window.activateWindow()
 
