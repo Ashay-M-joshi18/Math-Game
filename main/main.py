@@ -2369,8 +2369,8 @@ class AsteroidMathGame:
             accent_dim = "#EF6C00"
             title_color = "#FFF4E6"
 
-        card_w = max(430, min(580, int(canvas_w * 0.43)))
-        card_h = max(520, min(640, int(canvas_h * 0.66)))
+        card_w = max(750, min(700, int(canvas_w * 0.43)))
+        card_h = max(850, min(1050, int(canvas_h * 0.66)))
         card_x1 = center_x - (card_w // 2)
         card_x2 = center_x + (card_w // 2)
         card_y1 = max(30, ((canvas_h - card_h) // 2) - 20)
@@ -2429,7 +2429,7 @@ class AsteroidMathGame:
 
         subtitle_item = canvas.create_text(
             center_x,
-            card_y1 + int(card_h * 0.13),
+            card_y1 + int(card_h * 0.10),
             text="Session Summary",
             font=(FONT_FAMILY_UI, body_size - 1, "bold"),
             fill="#9AB6D6",
@@ -2438,7 +2438,7 @@ class AsteroidMathGame:
 
         title_item = canvas.create_text(
             center_x,
-            card_y1 + int(card_h * 0.27),
+            card_y1 + int(card_h * 0.22),
             text="Advanced Maths\nQuiz Completed!",
             font=(FONT_FAMILY_UI, title_size, "bold"),
             fill=title_color,
@@ -2448,7 +2448,7 @@ class AsteroidMathGame:
         )
         score_item = canvas.create_text(
             center_x,
-            card_y1 + int(card_h * 0.46),
+            card_y1 + int(card_h * 0.41),
             text=f"Your Score: 0 / {total}",
             font=(FONT_FAMILY_UI, score_size, "bold"),
             fill="white",
@@ -2456,7 +2456,7 @@ class AsteroidMathGame:
         )
         summary_item = canvas.create_text(
             center_x,
-            card_y1 + int(card_h * 0.56),
+            card_y1 + int(card_h * 0.52),
             text=summary,
             font=(FONT_FAMILY_UI, body_size, "bold"),
             fill="#D7E3FC",
@@ -2466,7 +2466,7 @@ class AsteroidMathGame:
         )
         accuracy_item = canvas.create_text(
             center_x,
-            card_y1 + int(card_h * 0.66),
+            card_y1 + int(card_h * 0.63),
             text=f"Accuracy: {accuracy:.0f}%",
             font=(FONT_FAMILY_UI, body_size),
             fill=accent,
